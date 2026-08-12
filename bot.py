@@ -1,7 +1,6 @@
 import os
-import random
 
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,14 +11,18 @@ from telegram.ext import (
 
 TOKEN = os.getenv("BOT_TOKEN")
 
+# آیدی صاحب ربات
 MY_ID = 8552447077
 
+# موجودی اولیه
 MY_START_COINS = 100_000
 USER_START_COINS = 1_000
 
+# حداقل و حداکثر شرط
 MIN_BET = 100
 MAX_BET = 10_000
 
+# موجودی‌ها
 coins = {}
 
 
@@ -33,36 +36,88 @@ def get_coins(user_id):
     return coins[user_id]
 
 
+# -------------------------
+# شروع ربات
+# -------------------------
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
+    keyboard = [
+        ["🎲 تاس", "⚽ فوتبال"],
+        ["🎳 بولینگ", "💰 سکه"],
+    ]
+
     await update.message.reply_text(
-        f"🤖 ربات بازی آماده است!\n\n"
-        f"🪙 موجودی: {get_coins(user_id):,}\n\n"
-        "🎲 تاس:\n"
+        "🤖 ربات بازی آماده است!\n\n"
+        f"🪙 موجودی شما: {get_coins(user_id):,}\n\n"
+        "🎲 بازی تاس:\n"
         "1تاس 100\n\n"
-        "🎳 بولینگ:\n"
+        "🎳 بازی بولینگ:\n"
         "1بولینگ 100\n\n"
-        "💸 انتقال:\n"
+        "💸 انتقال سکه:\n"
         "روی پیام شخص ریپلای کن و بنویس:\n"
         "انتقال 500\n\n"
-        "💰 موجودی:\n"
+        "💰 دیدن موجودی:\n"
         "/coins\n\n"
         "حداقل شرط: 100 🪙\n"
-        "حداکثر شرط: 10,000 🪙"
+        "حداکثر شرط: 10,000 🪙",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
     )
 
 
-async def coins_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -------------------------
+# موجودی
+# -------------------------
+
+async def coins_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     user_id = update.effective_user.id
 
     await update.message.reply_text(
-        f"💰 موجودی شما:\n"
+        f"💰 موجودی شما:\n\n"
         f"🪙 {get_coins(user_id):,} سکه"
     )
 
 
-async def transfer(update: Update, amount):
+# -------------------------
+# شارژ فقط صاحب ربات
+# -------------------------
+
+async def charge_coins(update: Update, amount: int):
+    user_id = update.effective_user.id
+
+    if user_id != MY_ID:
+        await update.message.reply_text(
+            "❌ این دستور فقط برای صاحب ربات است."
+        )
+        return
+
+    if amount <= 0:
+        await update.message.reply_text(
+            "❌ مبلغ باید بیشتر از صفر باشد."
+        )
+        return
+
+    coins[user_id] = get_coins(user_id) + amount
+
+    await update.message.reply_text(
+        f"✅ شارژ انجام شد!\n\n"
+        f"➕ مبلغ: {amount:,} 🪙\n"
+        f"💰 موجودی جدید: {coins[user_id]:,} 🪙"
+    )
+
+
+# -------------------------
+# انتقال سکه
+# -------------------------
+
+async def transfer_coins(update: Update, amount: int):
     sender_id = update.effective_user.id
     message = update.message
 
@@ -77,7 +132,9 @@ async def transfer(update: Update, amount):
     receiver = message.reply_to_message.from_user
 
     if receiver.is_bot:
-        await message.reply_text("❌ نمی‌توانی به ربات سکه بدهی.")
+        await message.reply_text(
+            "❌ نمی‌توانی به ربات سکه بدهی."
+        )
         return
 
     receiver_id = receiver.id
@@ -90,23 +147,24 @@ async def transfer(update: Update, amount):
 
     if amount <= 0:
         await message.reply_text(
-            "❌ مقدار باید بیشتر از صفر باشد."
+            "❌ مبلغ باید بیشتر از صفر باشد."
         )
         return
 
-    sender_coins = get_coins(sender_id)
+    sender_balance = get_coins(sender_id)
 
-    if sender_coins < amount:
+    if sender_balance < amount:
         await message.reply_text(
-            f"❌ موجودی کافی نیست.\n"
-            f"🪙 موجودی شما: {sender_coins:,}"
+            f"❌ موجودی کافی نیست.\n\n"
+            f"🪙 موجودی شما: {sender_balance:,}\n"
+            f"💸 مبلغ: {amount:,}"
         )
         return
 
-    receiver_coins = get_coins(receiver_id)
+    receiver_balance = get_coins(receiver_id)
 
-    coins[sender_id] = sender_coins - amount
-    coins[receiver_id] = receiver_coins + amount
+    coins[sender_id] = sender_balance - amount
+    coins[receiver_id] = receiver_balance + amount
 
     await message.reply_text(
         f"✅ انتقال انجام شد!\n\n"
@@ -115,6 +173,10 @@ async def transfer(update: Update, amount):
         f"💰 موجودی شما: {coins[sender_id]:,} 🪙"
     )
 
+
+# -------------------------
+# شروع بازی تاس / بولینگ
+# -------------------------
 
 async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -131,12 +193,13 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bet = int(parts[1])
     except ValueError:
         await update.message.reply_text(
-            "❌ مبلغ شرط باید عدد باشد.\n"
-            "مثال: 1تاس 100"
+            "❌ مبلغ شرط باید عدد باشد.\n\n"
+            "مثال:\n"
+            "1تاس 100"
         )
         return
 
-    if game not in ("1تاس", "1بولینگ"):
+    if game not in ["1تاس", "1بولینگ"]:
         return
 
     if bet < MIN_BET:
@@ -155,194 +218,425 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if balance < bet:
         await update.message.reply_text(
-            f"❌ موجودی کافی نیست.\n"
-            f"🪙 موجودی شما: {balance:,}"
+            f"❌ موجودی کافی نیست.\n\n"
+            f"🪙 موجودی شما: {balance:,}\n"
+            f"💰 شرط: {bet:,}"
         )
         return
 
+    # کم کردن شرط
     coins[user_id] -= bet
 
+    # -------------------------
+    # تاس
+    # -------------------------
+
     if game == "1تاس":
-        bot_score = random.randint(1, 6)
 
         context.user_data["game"] = "dice"
         context.user_data["bet"] = bet
-        context.user_data["bot_score"] = bot_score
 
         await update.message.reply_text(
-            f"🎲 بازی تاس شروع شد!\n\n"
-            f"💰 شرط: {bet:,} 🪙\n"
-            f"🤖 تاس ربات: {bot_score}\n\n"
-            "👤 حالا عدد تاس خودت را بفرست (1 تا 6)."
+            "🎲 نوبت ربات...\n"
+            "ربات در حال انداختن تاس است..."
         )
 
-    else:
-        bot_score = random.randint(0, 100)
+        # تاس واقعی تلگرام
+        dice_message = await update.message.reply_dice(
+            emoji="🎲"
+        )
+
+        bot_score = dice_message.dice.value
+
+        context.user_data["bot_score"] = bot_score
+
+        keyboard = [
+            ["🎲 انداختن تاس من"]
+        ]
+
+        await update.message.reply_text(
+            f"🤖 نتیجه ربات: {bot_score}\n\n"
+            "👤 حالا نوبت توئه!\n"
+            "روی دکمه زیر بزن تا تاس خودت انداخته بشه.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+        )
+
+        return
+
+    # -------------------------
+    # بولینگ
+    # -------------------------
+
+    if game == "1بولینگ":
 
         context.user_data["game"] = "bowling"
         context.user_data["bet"] = bet
-        context.user_data["bot_score"] = bot_score
 
         await update.message.reply_text(
-            f"🎳 بازی بولینگ شروع شد!\n\n"
-            f"💰 شرط: {bet:,} 🪙\n"
-            f"🤖 امتیاز ربات: {bot_score}\n\n"
-            "👤 حالا امتیاز خودت را بفرست (0 تا 100)."
+            "🎳 نوبت ربات...\n"
+            "ربات در حال انداختن بولینگ است..."
         )
 
+        # بولینگ واقعی تلگرام
+        bowling_message = await update.message.reply_dice(
+            emoji="🎳"
+        )
 
-async def game_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        bot_score = bowling_message.dice.value
+
+        context.user_data["bot_score"] = bot_score
+
+        keyboard = [
+            ["🎳 انداختن بولینگ من"]
+        ]
+
+        await update.message.reply_text(
+            f"🤖 نتیجه ربات: {bot_score}\n\n"
+            "👤 حالا نوبت توئه!\n"
+            "روی دکمه زیر بزن تا بولینگ خودت انداخته بشه.",
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+        )
+
+        return
+
+
+# -------------------------
+# انداختن تاس / بولینگ کاربر
+# -------------------------
+
+async def player_roll(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
     user_id = update.effective_user.id
+    text = update.message.text.strip()
 
     game = context.user_data.get("game")
 
     if not game:
-        return False
+        return
 
-    bet = context.user_data["bet"]
-    bot_score = context.user_data["bot_score"]
+    bet = context.user_data.get("bet")
+    bot_score = context.user_data.get("bot_score")
 
-    try:
-        user_score = int(update.message.text.strip())
-    except ValueError:
-        return False
+    # -------------------------
+    # تاس کاربر
+    # -------------------------
 
-    if game == "dice":
-        if user_score < 1 or user_score > 6:
-            await update.message.reply_text(
-                "❌ عدد تاس باید بین 1 تا 6 باشد."
-            )
-            return True
+    if game == "dice" and text == "🎲 انداختن تاس من":
 
-    if game == "bowling":
-        if user_score < 0 or user_score > 100:
-            await update.message.reply_text(
-                "❌ امتیاز بولینگ باید بین 0 تا 100 باشد."
-            )
-            return True
+        await update.message.reply_text(
+            "🎲 نوبت تو..."
+        )
 
-    if user_score > bot_score:
+        player_message = await update.message.reply_dice(
+            emoji="🎲"
+        )
+
+        player_score = player_message.dice.value
+
+        await finish_game(
+            update,
+            context,
+            user_id,
+            bot_score,
+            player_score,
+            bet
+        )
+
+        return
+
+    # -------------------------
+    # بولینگ کاربر
+    # -------------------------
+
+    if game == "bowling" and text == "🎳 انداختن بولینگ من":
+
+        await update.message.reply_text(
+            "🎳 نوبت تو..."
+        )
+
+        player_message = await update.message.reply_dice(
+            emoji="🎳"
+        )
+
+        player_score = player_message.dice.value
+
+        await finish_game(
+            update,
+            context,
+            user_id,
+            bot_score,
+            player_score,
+            bet
+        )
+
+        return
+
+
+# -------------------------
+# پایان بازی
+# -------------------------
+
+async def finish_game(
+    update,
+    context,
+    user_id,
+    bot_score,
+    player_score,
+    bet
+):
+
+    if player_score > bot_score:
+
         prize = bet * 2
-        coins[user_id] += prize
 
-        text = (
-            "🏆 بردی!\n"
+        coins[user_id] = get_coins(user_id) + prize
+
+        result = (
+            "🏆 برنده شدی!\n\n"
             f"🪙 جایزه: {prize:,}"
         )
 
-    elif user_score < bot_score:
-        text = (
-            "😢 باختی!\n"
-            f"🪙 شرط: {bet:,}"
+    elif player_score < bot_score:
+
+        result = (
+            "😢 باختی!\n\n"
+            f"🪙 شرط از دست رفت: {bet:,}"
         )
 
     else:
-        coins[user_id] += bet
 
-        text = (
-            "🤝 مساوی!\n"
+        coins[user_id] = get_coins(user_id) + bet
+
+        result = (
+            "🤝 مساوی شد!\n\n"
             f"🪙 شرط {bet:,} برگشت داده شد."
         )
 
     await update.message.reply_text(
         f"🤖 نتیجه ربات: {bot_score}\n"
-        f"👤 نتیجه تو: {user_score}\n\n"
-        f"{text}\n\n"
-        f"💰 موجودی جدید: {coins[user_id]:,} 🪙"
+        f"👤 نتیجه تو: {player_score}\n\n"
+        f"{result}\n\n"
+        f"💰 موجودی جدید: "
+        f"{get_coins(user_id):,} 🪙",
+        reply_markup=ReplyKeyboardRemove()
     )
 
     context.user_data.clear()
 
-    return True
 
+# -------------------------
+# دکمه‌های اصلی
+# -------------------------
 
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
     text = update.message.text.strip()
     user_id = update.effective_user.id
 
-    # نتیجه بازی در حال انجام
+    # اگر بازی در حال انجام است
     if context.user_data.get("game"):
-        if await game_result(update, context):
-            return
 
-    # شارژ فقط برای صاحب ربات
-    if text.startswith("شارژ "):
-        if user_id != MY_ID:
-            await update.message.reply_text(
-                "❌ این دستور فقط برای صاحب ربات است."
-            )
-            return
-
-        try:
-            amount = int(text.split()[1])
-        except (ValueError, IndexError):
-            await update.message.reply_text(
-                "❌ مثال:\nشارژ 50000"
-            )
-            return
-
-        if amount <= 0:
-            await update.message.reply_text(
-                "❌ مبلغ باید بیشتر از صفر باشد."
-            )
-            return
-
-        coins[user_id] = get_coins(user_id) + amount
-
-        await update.message.reply_text(
-            f"✅ {amount:,} سکه اضافه شد.\n\n"
-            f"💰 موجودی جدید: {coins[user_id]:,} 🪙"
+        await player_roll(
+            update,
+            context
         )
+
         return
 
-    # انتقال
-    if text.startswith("انتقال "):
-        try:
-            amount = int(text.split()[1])
-            await transfer(update, amount)
-        except (ValueError, IndexError):
+    # -------------------------
+    # شارژ
+    # -------------------------
+
+    if text.startswith("شارژ "):
+
+        parts = text.split()
+
+        if len(parts) != 2:
+
             await update.message.reply_text(
-                "❌ مثال:\nانتقال 500"
+                "❌ مثال:\n"
+                "شارژ 50000"
             )
+
+            return
+
+        try:
+            amount = int(parts[1])
+
+        except ValueError:
+
+            await update.message.reply_text(
+                "❌ مبلغ باید عدد باشد."
+            )
+
+            return
+
+        await charge_coins(
+            update,
+            amount
+        )
+
         return
 
-    # شروع بازی
-    if text.startswith("1تاس") or text.startswith("1بولینگ"):
-        await start_game(update, context)
+    # -------------------------
+    # انتقال
+    # -------------------------
+
+    if text.startswith("انتقال "):
+
+        parts = text.split()
+
+        if len(parts) != 2:
+
+            await update.message.reply_text(
+                "❌ مثال:\n"
+                "انتقال 500"
+            )
+
+            return
+
+        try:
+            amount = int(parts[1])
+
+        except ValueError:
+
+            await update.message.reply_text(
+                "❌ مبلغ باید عدد باشد."
+            )
+
+            return
+
+        await transfer_coins(
+            update,
+            amount
+        )
+
         return
+
+    # -------------------------
+    # شروع بازی
+    # -------------------------
+
+    if text.startswith("1تاس"):
+
+        await start_game(
+            update,
+            context
+        )
+
+        return
+
+    if text.startswith("1بولینگ"):
+
+        await start_game(
+            update,
+            context
+        )
+
+        return
+
+    # -------------------------
+    # دکمه تاس
+    # -------------------------
 
     if text == "🎲 تاس":
+
         await update.message.reply_text(
-            "🎲 مثال:\n1تاس 100"
+            "🎲 برای بازی بنویس:\n\n"
+            "1تاس 100"
         )
 
-    elif text == "🎳 بولینگ":
+        return
+
+    # -------------------------
+    # دکمه بولینگ
+    # -------------------------
+
+    if text == "🎳 بولینگ":
+
         await update.message.reply_text(
-            "🎳 مثال:\n1بولینگ 100"
+            "🎳 برای بازی بنویس:\n\n"
+            "1بولینگ 100"
         )
 
-    elif text == "⚽ فوتبال":
+        return
+
+    # -------------------------
+    # فوتبال
+    # -------------------------
+
+    if text == "⚽ فوتبال":
+
         await update.message.reply_text(
-            "⚽ فوتبال فعلاً در حال ساخت است."
+            "⚽ بازی فوتبال به‌زودی اضافه می‌شود."
         )
 
-    elif text == "💰 سکه":
-        await coins_command(update, context)
+        return
 
+    # -------------------------
+    # سکه
+    # -------------------------
+
+    if text == "💰 سکه":
+
+        await coins_command(
+            update,
+            context
+        )
+
+        return
+
+
+# -------------------------
+# اجرای ربات
+# -------------------------
 
 def main():
+
     if not TOKEN:
-        raise RuntimeError("BOT_TOKEN تنظیم نشده است")
 
-    app = Application.builder().token(TOKEN).build()
+        raise RuntimeError(
+            "BOT_TOKEN تنظیم نشده است"
+        )
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("coins", coins_command))
+    app = (
+        Application
+        .builder()
+        .token(TOKEN)
+        .build()
+    )
+
+    app.add_handler(
+        CommandHandler(
+            "start",
+            start
+        )
+    )
+
+    app.add_handler(
+        CommandHandler(
+            "coins",
+            coins_command
+        )
+    )
 
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            message_handler
+            button_handler
         )
     )
 

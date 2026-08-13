@@ -5,9 +5,9 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# ======== ========
-ADMIN_ID = 123456789  #  8552447077
-TOKEN =8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM
+# ======== اطلاعات شما ========
+ADMIN_ID = 8552447077  # ایدی عددی شما
+TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"  # توکن ربات
 
 user_data = {}
 

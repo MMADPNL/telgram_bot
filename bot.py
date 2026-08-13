@@ -1,3 +1,37 @@
+# ========== ریست کامل (فقط مالک) - موجودی مالک حفظ می‌شه ==========
+@bot.command(name="ریست")
+async def reset_all(ctx):
+    # فقط مالک اجازه داره
+    if ctx.author.id != OWNER_ID:
+        await ctx.send("❌ فقط مالک ربات می‌تونه همه چیز رو ریست کنه!")
+        return
+
+    # ذخیره موجودی مالک قبل از ریست
+    owner_balance = get_balance(OWNER_ID)
+
+    # سوال تأیید
+    confirm_msg = await ctx.send("⚠️ **آیا مطمئنی؟** تمام موجودی کاربران (به جز خودت) به صفر می‌رسد! (بله / خیر)")
+
+    def check(m):
+        return m.author == ctx.author and m.content.lower() in ["بله", "خیر"]
+
+    try:
+        response = await bot.wait_for("message", timeout=30.0, check=check)
+    except:
+        await ctx.send("⏰ زمان تأخیر! عملیات لغو شد.")
+        return
+
+    if response.content.lower() == "خیر":
+        await ctx.send("❌ عملیات ریست لغو شد.")
+        return
+
+    # ریست کردن: فایل رو خالی کن
+    save_data({})  # همه موجودی‌ها صفر
+
+    # برگردوندن موجودی مالک
+    set_balance(OWNER_ID, owner_balance)
+
+    await ctx.send(f"✅ **همه موجودی‌ها به صفر رسید.** (موجودی شما: {owner_balance} سکه دست نخورده ماند) 🔄")
 import discord
 from discord.ext import commands
 import json

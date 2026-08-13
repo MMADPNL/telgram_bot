@@ -1,37 +1,3 @@
-# ========== ریست کامل (فقط مالک) - موجودی مالک حفظ می‌شه ==========
-@bot.command(name="ریست")
-async def reset_all(ctx):
-    # فقط مالک اجازه داره
-    if ctx.author.id != OWNER_ID:
-        await ctx.send("❌ فقط مالک ربات می‌تونه همه چیز رو ریست کنه!")
-        return
-
-    # ذخیره موجودی مالک قبل از ریست
-    owner_balance = get_balance(OWNER_ID)
-
-    # سوال تأیید
-    confirm_msg = await ctx.send("⚠️ **آیا مطمئنی؟** تمام موجودی کاربران (به جز خودت) به صفر می‌رسد! (بله / خیر)")
-
-    def check(m):
-        return m.author == ctx.author and m.content.lower() in ["بله", "خیر"]
-
-    try:
-        response = await bot.wait_for("message", timeout=30.0, check=check)
-    except:
-        await ctx.send("⏰ زمان تأخیر! عملیات لغو شد.")
-        return
-
-    if response.content.lower() == "خیر":
-        await ctx.send("❌ عملیات ریست لغو شد.")
-        return
-
-    # ریست کردن: فایل رو خالی کن
-    save_data({})  # همه موجودی‌ها صفر
-
-    # برگردوندن موجودی مالک
-    set_balance(OWNER_ID, owner_balance)
-
-    await ctx.send(f"✅ **همه موجودی‌ها به صفر رسید.** (موجودی شما: {owner_balance} سکه دست نخورده ماند) 🔄")
 import discord
 from discord.ext import commands
 import json
@@ -44,11 +10,12 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 DATA_FILE = "balances.json"
+STATS_FILE = "stats.json"
 
-OWNER_ID = 123456789012345678      # آیدی عددی خودت
+OWNER_ID = 123456789012345678      # آیدی عددی خودت رو بذار اینجا
 ADMIN_IDS = [987654321098765432]   # آیدی مدیران (لیست)
 
-# ========== توابع دیتا ==========
+# ========== توابع دیتا (موجودی) ==========
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
@@ -72,6 +39,29 @@ def add_balance(user_id, amount):
     current = get_balance(user_id)
     set_balance(user_id, current + amount)
 
+# ========== توابع دیتا (آمار) ==========
+def load_stats():
+    if not os.path.exists(STATS_FILE):
+        return {}
+    with open(STATS_FILE, "r") as f:
+        return json.load(f)
+
+def save_stats(data):
+    with open(STATS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def get_stats(user_id):
+    data = load_stats()
+    return data.get(str(user_id), {"wins": 0, "losses": 0, "draws": 0})
+
+def update_stats(user_id, result):
+    data = load_stats()
+    user_id = str(user_id)
+    if user_id not in data:
+        data[user_id] = {"wins": 0, "losses": 0, "draws": 0}
+    data[user_id][result] += 1
+    save_stats(data)
+
 # ========== بازی تاس (شرطی) ==========
 @bot.command(name="تاس")
 async def dice(ctx, bet: int):
@@ -88,13 +78,15 @@ async def dice(ctx, bet: int):
     if user_roll > bot_roll:
         win = bet * 2
         add_balance(ctx.author.id, win)
-        result = f"🎉 بردی! +{win} سکه (۲ برابر)"
+        update_stats(ctx.author.id, "wins")
+        result = f"🎉 بردی! +{win} سکه"
     elif user_roll < bot_roll:
         add_balance(ctx.author.id, -bet)
+        update_stats(ctx.author.id, "losses")
         result = f"😢 باختی! -{bet} سکه"
     else:
+        update_stats(ctx.author.id, "draws")
         result = "🤝 مساوی! شرط برگشت"
-        # در مساوی چیزی کم نمیشه
 
     embed = discord.Embed(title="🎲 بازی تاس (شرطی)", color=0x00ff00)
     embed.add_field(name=f"{ctx.author.display_name}", value=f"🎲 {user_roll}", inline=True)
@@ -117,9 +109,11 @@ async def basketball(ctx, bet: int):
     if user_score == "گل کردی! 🏀✅":
         win = bet * 3
         add_balance(ctx.author.id, win)
-        result = f"🌟 +{win} سکه (۳ برابر)"
+        update_stats(ctx.author.id, "wins")
+        result = f"🌟 +{win} سکه"
     else:
         add_balance(ctx.author.id, -bet)
+        update_stats(ctx.author.id, "losses")
         result = f"💔 -{bet} سکه"
 
     embed = discord.Embed(title="🏀 بسکتبال (شرطی)", color=0xff8c00)
@@ -139,17 +133,27 @@ async def bowling(ctx, bet: int):
         return
 
     pins_down = random.randint(0, 10)
-    user_guess = random.randint(0, 10)  # حدس کاربر (در نسخه واقعی می‌تونی ورودی بگیری)
+    user_guess = random.randint(0, 10)
     diff = abs(pins_down - user_guess)
-    reward = max(0, bet * (10 - diff) // 10)  # پاداش متناسب با دقت
+    reward = max(0, bet * (10 - diff) // 10)
 
-    add_balance(ctx.author.id, reward - bet)  # اگر reward > bet باشه سود می‌کنه
+    if reward > bet:
+        add_balance(ctx.author.id, reward - bet)
+        update_stats(ctx.author.id, "wins")
+        result = f"🎉 +{reward} سکه"
+    elif reward < bet:
+        add_balance(ctx.author.id, reward - bet)
+        update_stats(ctx.author.id, "losses")
+        result = f"😢 -{bet - reward} سکه"
+    else:
+        result = "🤝 دقیقاً شرط برگشت"
 
     embed = discord.Embed(title="🎳 بولینگ (شرطی)", color=0x00bfff)
     embed.add_field(name="پین‌های خوابیده", value=f"{pins_down} / ۱۰", inline=True)
     embed.add_field(name="حدس تو", value=f"{user_guess}", inline=True)
     embed.add_field(name="شرط", value=f"{bet} 🪙", inline=True)
     embed.add_field(name="پاداش نهایی", value=f"{reward} سکه", inline=False)
+    embed.add_field(name="نتیجه", value=result, inline=False)
     await ctx.send(embed=embed)
 
 # ========== موجودی ==========
@@ -196,6 +200,69 @@ async def deduct(ctx, amount: int, member: discord.Member):
 
     add_balance(member.id, -amount)
     await ctx.send(f"✅ {amount} سکه از {member.mention} کسر شد. (توسط {ctx.author.display_name})")
+
+# ========== ریست موجودی (همه به جز مالک) ==========
+@bot.command(name="ریست")
+async def reset_all(ctx):
+    if ctx.author.id != OWNER_ID:
+        await ctx.send("❌ فقط مالک ربات می‌تونه موجودی رو ریست کنه!")
+        return
+
+    owner_balance = get_balance(OWNER_ID)
+
+    confirm = await ctx.send("⚠️ **آیا مطمئنی؟** موجودی همه کاربران (به جز خودت) صفر می‌شه! (بله/خیر)")
+    def check(m):
+        return m.author == ctx.author and m.content.lower() in ["بله", "خیر"]
+
+    try:
+        response = await bot.wait_for("message", timeout=30.0, check=check)
+    except:
+        await ctx.send("⏰ زمان تأخیر! عملیات لغو شد.")
+        return
+
+    if response.content.lower() == "خیر":
+        await ctx.send("❌ عملیات ریست لغو شد.")
+        return
+
+    save_data({})
+    set_balance(OWNER_ID, owner_balance)
+    await ctx.send(f"✅ **همه موجودی‌ها به صفر رسید.** (موجودی شما: {owner_balance} سکه دست نخورده ماند) 🔄")
+
+# ========== ریست آمار بازی‌ها (فقط مالک) ==========
+@bot.command(name="ریست‌بازی")
+async def reset_stats(ctx):
+    if ctx.author.id != OWNER_ID:
+        await ctx.send("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
+        return
+
+    confirm = await ctx.send("⚠️ **همه آمار بازی‌ها پاک میشه!** ادامه بدی؟ (بله/خیر)")
+    def check(m):
+        return m.author == ctx.author and m.content.lower() in ["بله", "خیر"]
+
+    try:
+        response = await bot.wait_for("message", timeout=30.0, check=check)
+    except:
+        await ctx.send("⏰ زمان تأخیر! عملیات لغو شد.")
+        return
+
+    if response.content.lower() == "خیر":
+        await ctx.send("❌ عملیات ریست لغو شد.")
+        return
+
+    save_stats({})
+    await ctx.send("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")
+
+# ========== نمایش آمار ==========
+@bot.command(name="آمار")
+async def stats(ctx, member: discord.Member = None):
+    if member is None:
+        member = ctx.author
+    stats = get_stats(member.id)
+    embed = discord.Embed(title=f"📊 آمار بازی‌های {member.display_name}", color=0x9b59b6)
+    embed.add_field(name="🏆 برد", value=stats["wins"], inline=True)
+    embed.add_field(name="💔 باخت", value=stats["losses"], inline=True)
+    embed.add_field(name="🤝 مساوی", value=stats["draws"], inline=True)
+    await ctx.send(embed=embed)
 
 # ========== اجرا ==========
 bot.run("توکن_ربات_خودت_اینجا")

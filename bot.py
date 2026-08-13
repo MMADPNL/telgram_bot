@@ -1,21 +1,18 @@
-import discord
-from discord.ext import commands
 import json
-import random
 import os
+import random
+import re
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# ========== تنظیمات اولیه ==========
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+# ========== توکن و تنظیمات ==========
+TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"
+OWNER_ID = 123456789  # <-- آیدی عددی خودت رو از @userinfobot بگیر
 
 DATA_FILE = "balances.json"
 STATS_FILE = "stats.json"
 
-OWNER_ID = 123456789012345678      # آیدی عددی خودت رو بذار اینجا
-ADMIN_IDS = [987654321098765432]   # آیدی مدیران (لیست)
-
-# ========== توابع دیتا (موجودی) ==========
+# ========== توابع دیتا ==========
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
@@ -39,7 +36,6 @@ def add_balance(user_id, amount):
     current = get_balance(user_id)
     set_balance(user_id, current + amount)
 
-# ========== توابع دیتا (آمار) ==========
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return {}
@@ -62,207 +58,303 @@ def update_stats(user_id, result):
     data[user_id][result] += 1
     save_stats(data)
 
-# ========== بازی تاس (شرطی) ==========
-@bot.command(name="تاس")
-async def dice(ctx, bet: int):
+# ========== صفحه کلید شیشه‌ای ==========
+def get_game_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("🎲 تاس", callback_data="game_dice")],
+        [InlineKeyboardButton("🏀 بسکتبال", callback_data="game_basketball")],
+        [InlineKeyboardButton("🎳 بولینگ", callback_data="game_bowling")],
+        [InlineKeyboardButton("🎯 دارت", callback_data="game_dart")],
+        [InlineKeyboardButton("💰 موجودی", callback_data="balance")],
+        [InlineKeyboardButton("📊 آمار", callback_data="stats")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# ========== شروع ==========
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🎮 **به ربات بازی خوش اومدی!**\n\n"
+        "📌 **فرمت بازی:**\n"
+        "`1تاس 200`\n"
+        "`1بسکتبال 150`\n"
+        "`1بولینگ 100`\n"
+        "`1دارت 300`\n\n"
+        "💰 شرط: **۵۰** تا **۵۰۰۰** سکه\n"
+        "📊 آمار برد/باخت/مساوی ذخیره میشه\n\n"
+        "❗ یا از دکمه‌های زیر استفاده کن:",
+        reply_markup=get_game_keyboard()
+    )
+
+# ========== پردازش دستورات با فرمت 1بازی ==========
+async def handle_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    user_id = update.effective_user.id
+
+    # الگوی regex: 1تاس 200
+    pattern = r'^1(تاس|بسکتبال|بولینگ|دارت)\s+(\d+)$'
+    match = re.match(pattern, text)
+    if not match:
+        return
+
+    game_name = match.group(1)
+    try:
+        bet = int(match.group(2))
+    except:
+        await update.message.reply_text("❌ مقدار شرط باید عدد باشه!")
+        return
+
+    # اعتبارسنجی شرط
     if bet < 50 or bet > 5000:
-        await ctx.send("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
+        await update.message.reply_text("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
         return
-    if get_balance(ctx.author.id) < bet:
-        await ctx.send(f"❌ موجودی کافی نداری! (موجودی: {get_balance(ctx.author.id)} سکه)")
-        return
-
-    user_roll = random.randint(1, 6)
-    bot_roll = random.randint(1, 6)
-
-    if user_roll > bot_roll:
-        win = bet * 2
-        add_balance(ctx.author.id, win)
-        update_stats(ctx.author.id, "wins")
-        result = f"🎉 بردی! +{win} سکه"
-    elif user_roll < bot_roll:
-        add_balance(ctx.author.id, -bet)
-        update_stats(ctx.author.id, "losses")
-        result = f"😢 باختی! -{bet} سکه"
-    else:
-        update_stats(ctx.author.id, "draws")
-        result = "🤝 مساوی! شرط برگشت"
-
-    embed = discord.Embed(title="🎲 بازی تاس (شرطی)", color=0x00ff00)
-    embed.add_field(name=f"{ctx.author.display_name}", value=f"🎲 {user_roll}", inline=True)
-    embed.add_field(name="ربات", value=f"🤖 {bot_roll}", inline=True)
-    embed.add_field(name="شرط", value=f"{bet} 🪙", inline=True)
-    embed.add_field(name="نتیجه", value=result, inline=False)
-    await ctx.send(embed=embed)
-
-# ========== بازی بسکتبال (شرطی) ==========
-@bot.command(name="بسکتبال")
-async def basketball(ctx, bet: int):
-    if bet < 50 or bet > 5000:
-        await ctx.send("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
-        return
-    if get_balance(ctx.author.id) < bet:
-        await ctx.send(f"❌ موجودی کافی نداری! (موجودی: {get_balance(ctx.author.id)} سکه)")
+    if get_balance(user_id) < bet:
+        await update.message.reply_text(f"❌ موجودی کافی نداری! (موجودی: {get_balance(user_id)} سکه)")
         return
 
-    user_score = random.choice(["گل کردی! 🏀✅", "گل نشد! ❌"])
-    if user_score == "گل کردی! 🏀✅":
-        win = bet * 3
-        add_balance(ctx.author.id, win)
-        update_stats(ctx.author.id, "wins")
-        result = f"🌟 +{win} سکه"
-    else:
-        add_balance(ctx.author.id, -bet)
-        update_stats(ctx.author.id, "losses")
-        result = f"💔 -{bet} سکه"
+    # ========== بازی تاس ==========
+    if game_name == "تاس":
+        user_roll = random.randint(1, 6)
+        bot_roll = random.randint(1, 6)
+        if user_roll > bot_roll:
+            win = bet * 2
+            add_balance(user_id, win)
+            update_stats(user_id, "wins")
+            result = f"🎉 بردی! +{win} سکه"
+        elif user_roll < bot_roll:
+            add_balance(user_id, -bet)
+            update_stats(user_id, "losses")
+            result = f"😢 باختی! -{bet} سکه"
+        else:
+            update_stats(user_id, "draws")
+            result = "🤝 مساوی! شرط برگشت"
+        await update.message.reply_text(
+            f"🎲 **بازی تاس**\n\n"
+            f"🎲 تو: {user_roll}\n"
+            f"🤖 ربات: {bot_roll}\n"
+            f"💰 شرط: {bet} سکه\n"
+            f"📌 نتیجه: {result}"
+        )
 
-    embed = discord.Embed(title="🏀 بسکتبال (شرطی)", color=0xff8c00)
-    embed.add_field(name="شوت تو", value=user_score, inline=False)
-    embed.add_field(name="شرط", value=f"{bet} 🪙", inline=True)
-    embed.add_field(name="نتیجه", value=result, inline=False)
-    await ctx.send(embed=embed)
+    # ========== بازی بسکتبال ==========
+    elif game_name == "بسکتبال":
+        user_score = random.choice(["گل کردی! 🏀✅", "گل نشد! ❌"])
+        if user_score == "گل کردی! 🏀✅":
+            win = bet * 3
+            add_balance(user_id, win)
+            update_stats(user_id, "wins")
+            result = f"🌟 +{win} سکه"
+        else:
+            add_balance(user_id, -bet)
+            update_stats(user_id, "losses")
+            result = f"💔 -{bet} سکه"
+        await update.message.reply_text(
+            f"🏀 **بازی بسکتبال**\n\n"
+            f"🏀 شوت: {user_score}\n"
+            f"💰 شرط: {bet} سکه\n"
+            f"📌 نتیجه: {result}"
+        )
 
-# ========== بازی بولینگ (شرطی) ==========
-@bot.command(name="بولینگ")
-async def bowling(ctx, bet: int):
-    if bet < 50 or bet > 5000:
-        await ctx.send("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
-        return
-    if get_balance(ctx.author.id) < bet:
-        await ctx.send(f"❌ موجودی کافی نداری! (موجودی: {get_balance(ctx.author.id)} سکه)")
-        return
+    # ========== بازی بولینگ ==========
+    elif game_name == "بولینگ":
+        pins_down = random.randint(0, 10)
+        user_guess = random.randint(0, 10)
+        diff = abs(pins_down - user_guess)
+        reward = max(0, bet * (10 - diff) // 10)
 
-    pins_down = random.randint(0, 10)
-    user_guess = random.randint(0, 10)
-    diff = abs(pins_down - user_guess)
-    reward = max(0, bet * (10 - diff) // 10)
+        if reward > bet:
+            add_balance(user_id, reward - bet)
+            update_stats(user_id, "wins")
+            result = f"🎉 +{reward} سکه"
+        elif reward < bet:
+            add_balance(user_id, reward - bet)
+            update_stats(user_id, "losses")
+            result = f"😢 -{bet - reward} سکه"
+        else:
+            result = "🤝 دقیقاً شرط برگشت"
+        await update.message.reply_text(
+            f"🎳 **بازی بولینگ**\n\n"
+            f"🎳 پین‌های خوابیده: {pins_down} / ۱۰\n"
+            f"🎯 حدس تو: {user_guess}\n"
+            f"💰 شرط: {bet} سکه\n"
+            f"🎁 پاداش: {reward} سکه\n"
+            f"📌 نتیجه: {result}"
+        )
 
-    if reward > bet:
-        add_balance(ctx.author.id, reward - bet)
-        update_stats(ctx.author.id, "wins")
-        result = f"🎉 +{reward} سکه"
-    elif reward < bet:
-        add_balance(ctx.author.id, reward - bet)
-        update_stats(ctx.author.id, "losses")
-        result = f"😢 -{bet - reward} سکه"
-    else:
-        result = "🤝 دقیقاً شرط برگشت"
+    # ========== بازی دارت ==========
+    elif game_name == "دارت":
+        user_throw = random.randint(1, 10)  # پرتاب کاربر
+        bot_throw = random.randint(1, 10)   # پرتاب ربات
+        target = random.randint(1, 10)      # هدف
 
-    embed = discord.Embed(title="🎳 بولینگ (شرطی)", color=0x00bfff)
-    embed.add_field(name="پین‌های خوابیده", value=f"{pins_down} / ۱۰", inline=True)
-    embed.add_field(name="حدس تو", value=f"{user_guess}", inline=True)
-    embed.add_field(name="شرط", value=f"{bet} 🪙", inline=True)
-    embed.add_field(name="پاداش نهایی", value=f"{reward} سکه", inline=False)
-    embed.add_field(name="نتیجه", value=result, inline=False)
-    await ctx.send(embed=embed)
+        user_diff = abs(user_throw - target)
+        bot_diff = abs(bot_throw - target)
+
+        if user_diff < bot_diff:
+            win = bet * 2
+            add_balance(user_id, win)
+            update_stats(user_id, "wins")
+            result = f"🎯 بردی! +{win} سکه"
+        elif user_diff > bot_diff:
+            add_balance(user_id, -bet)
+            update_stats(user_id, "losses")
+            result = f"😢 باختی! -{bet} سکه"
+        else:
+            update_stats(user_id, "draws")
+            result = "🤝 مساوی! شرط برگشت"
+
+        await update.message.reply_text(
+            f"🎯 **بازی دارت**\n\n"
+            f"🎯 هدف: {target}\n"
+            f"📌 پرتاب تو: {user_throw} (فاصله: {user_diff})\n"
+            f"📌 پرتاب ربات: {bot_throw} (فاصله: {bot_diff})\n"
+            f"💰 شرط: {bet} سکه\n"
+            f"📌 نتیجه: {result}"
+        )
 
 # ========== موجودی ==========
-@bot.command(name="موجودی")
-async def balance(ctx, member: discord.Member = None):
-    if member is None:
-        member = ctx.author
-    bal = get_balance(member.id)
-    embed = discord.Embed(title=f"💰 موجودی {member.display_name}", color=0xffd700)
-    embed.add_field(name="سکه", value=f"{bal} 🪙", inline=False)
-    await ctx.send(embed=embed)
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    bal = get_balance(user_id)
+    await update.message.reply_text(f"💰 **موجودی شما:** {bal} سکه 🪙")
 
-# ========== انتقال (عمومی) ==========
-@bot.command(name="انتقال")
-async def transfer(ctx, amount: int, member: discord.Member):
+# ========== آمار ==========
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    stats_data = get_stats(user_id)
+    await update.message.reply_text(
+        f"📊 **آمار بازی‌های شما:**\n\n"
+        f"🏆 برد: {stats_data['wins']}\n"
+        f"💔 باخت: {stats_data['losses']}\n"
+        f"🤝 مساوی: {stats_data['draws']}"
+    )
+
+# ========== انتقال ==========
+async def transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ دستور: `/transfer 100 123456789`")
+        return
+    try:
+        amount = int(context.args[0])
+        target_id = int(context.args[1])
+    except:
+        await update.message.reply_text("❌ دستور صحیح نیست! مثال: `/transfer 100 123456789`")
+        return
+
+    user_id = update.effective_user.id
     if amount <= 0:
-        await ctx.send("❌ مقدار باید مثبت باشه!")
+        await update.message.reply_text("❌ مقدار باید مثبت باشه!")
         return
-    if member.id == ctx.author.id:
-        await ctx.send("❌ نمی‌تونی به خودت انتقال بدی!")
+    if target_id == user_id:
+        await update.message.reply_text("❌ نمی‌تونی به خودت انتقال بدی!")
         return
-    if get_balance(ctx.author.id) < amount:
-        await ctx.send("❌ موجودی کافی نداری!")
-        return
-
-    add_balance(ctx.author.id, -amount)
-    add_balance(member.id, amount)
-    await ctx.send(f"✅ {amount} سکه به {member.mention} انتقال داده شد.")
-
-# ========== کسر (فقط مالک و مدیران) ==========
-@bot.command(name="کسر")
-@commands.has_permissions(administrator=True)
-async def deduct(ctx, amount: int, member: discord.Member):
-    if ctx.author.id != OWNER_ID and ctx.author.id not in ADMIN_IDS:
-        await ctx.send("❌ شما اجازه کسر از دیگران را ندارید!")
-        return
-    if amount <= 0:
-        await ctx.send("❌ مقدار باید مثبت باشه!")
-        return
-    current = get_balance(member.id)
-    if current < amount:
-        await ctx.send(f"❌ موجودی {member.display_name} کمتر از {amount} است!")
+    if get_balance(user_id) < amount:
+        await update.message.reply_text("❌ موجودی کافی نداری!")
         return
 
-    add_balance(member.id, -amount)
-    await ctx.send(f"✅ {amount} سکه از {member.mention} کسر شد. (توسط {ctx.author.display_name})")
+    add_balance(user_id, -amount)
+    add_balance(target_id, amount)
+    await update.message.reply_text(f"✅ {amount} سکه به کاربر با آیدی {target_id} انتقال داده شد.")
 
-# ========== ریست موجودی (همه به جز مالک) ==========
-@bot.command(name="ریست")
-async def reset_all(ctx):
-    if ctx.author.id != OWNER_ID:
-        await ctx.send("❌ فقط مالک ربات می‌تونه موجودی رو ریست کنه!")
+# ========== ریست موجودی (فقط مالک) ==========
+async def reset_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ فقط مالک ربات می‌تونه موجودی رو ریست کنه!")
         return
 
     owner_balance = get_balance(OWNER_ID)
-
-    confirm = await ctx.send("⚠️ **آیا مطمئنی؟** موجودی همه کاربران (به جز خودت) صفر می‌شه! (بله/خیر)")
-    def check(m):
-        return m.author == ctx.author and m.content.lower() in ["بله", "خیر"]
-
-    try:
-        response = await bot.wait_for("message", timeout=30.0, check=check)
-    except:
-        await ctx.send("⏰ زمان تأخیر! عملیات لغو شد.")
-        return
-
-    if response.content.lower() == "خیر":
-        await ctx.send("❌ عملیات ریست لغو شد.")
-        return
-
     save_data({})
     set_balance(OWNER_ID, owner_balance)
-    await ctx.send(f"✅ **همه موجودی‌ها به صفر رسید.** (موجودی شما: {owner_balance} سکه دست نخورده ماند) 🔄")
+    await update.message.reply_text(f"✅ **همه موجودی‌ها به صفر رسید.** (موجودی شما: {owner_balance} سکه دست نخورده ماند) 🔄")
 
 # ========== ریست آمار بازی‌ها (فقط مالک) ==========
-@bot.command(name="ریست‌بازی")
-async def reset_stats(ctx):
-    if ctx.author.id != OWNER_ID:
-        await ctx.send("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
-        return
-
-    confirm = await ctx.send("⚠️ **همه آمار بازی‌ها پاک میشه!** ادامه بدی؟ (بله/خیر)")
-    def check(m):
-        return m.author == ctx.author and m.content.lower() in ["بله", "خیر"]
-
-    try:
-        response = await bot.wait_for("message", timeout=30.0, check=check)
-    except:
-        await ctx.send("⏰ زمان تأخیر! عملیات لغو شد.")
-        return
-
-    if response.content.lower() == "خیر":
-        await ctx.send("❌ عملیات ریست لغو شد.")
+async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
         return
 
     save_stats({})
-    await ctx.send("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")
+    await update.message.reply_text("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")
 
-# ========== نمایش آمار ==========
-@bot.command(name="آمار")
-async def stats(ctx, member: discord.Member = None):
-    if member is None:
-        member = ctx.author
-    stats = get_stats(member.id)
-    embed = discord.Embed(title=f"📊 آمار بازی‌های {member.display_name}", color=0x9b59b6)
-    embed.add_field(name="🏆 برد", value=stats["wins"], inline=True)
-    embed.add_field(name="💔 باخت", value=stats["losses"], inline=True)
-    embed.add_field(name="🤝 مساوی", value=stats["draws"], inline=True)
-    await ctx.send(embed=embed)
+# ========== ریست کامل (موجودی به جز مالک + آمار) ==========
+async def reset_all_full(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ فقط مالک ربات می‌تونه ریست کامل انجام بده!")
+        return
+
+    owner_balance = get_balance(OWNER_ID)
+    save_data({})
+    set_balance(OWNER_ID, owner_balance)
+    save_stats({})
+    await update.message.reply_text(
+        f"✅ **ریست کامل انجام شد!**\n\n"
+        f"• همه موجودی‌ها به جز شما صفر شد.\n"
+        f"• همه آمار بازی‌ها پاک شد.\n"
+        f"• موجودی شما: {owner_balance} سکه دست نخورده ماند. 🔄"
+    )
+
+# ========== مدیریت دکمه‌های شیشه‌ای ==========
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    if data == "game_dice":
+        await query.message.reply_text("🎲 مثال: `1تاس 200`")
+    elif data == "game_basketball":
+        await query.message.reply_text("🏀 مثال: `1بسکتبال 150`")
+    elif data == "game_bowling":
+        await query.message.reply_text("🎳 مثال: `1بولینگ 100`")
+    elif data == "game_dart":
+        await query.message.reply_text("🎯 مثال: `1دارت 300`")
+    elif data == "balance":
+        user_id = query.from_user.id
+        bal = get_balance(user_id)
+        await query.message.reply_text(f"💰 **موجودی شما:** {bal} سکه 🪙")
+    elif data == "stats":
+        user_id = query.from_user.id
+        stats_data = get_stats(user_id)
+        await query.message.reply_text(
+            f"📊 **آمار بازی‌های شما:**\n\n"
+            f"🏆 برد: {stats_data['wins']}\n"
+            f"💔 باخت: {stats_data['losses']}\n"
+            f"🤝 مساوی: {stats_data['draws']}"
+        )
 
 # ========== اجرا ==========
-bot.run("توکن_ربات_خودت_اینجا")
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("transfer", transfer))
+    app.add_handler(CommandHandler("reset", reset_all))
+    app.add_handler(CommandHandler("resetstats", reset_stats))
+    app.add_handler(CommandHandler("resetall", reset_all_full))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    # هندلر برای دستورات 1بازی
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_command))
+
+    print("🤖 ربات روشن شد...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
+        return
+
+    save_stats({})  # <-- اینجا کل فایل آمار رو خالی میکنه
+    await update.message.reply_text("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
+        return
+
+    save_stats({})  # <-- اینجا کل فایل آمار رو خالی میکنه
+    await update.message.reply_text("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")

@@ -1,46 +1,37 @@
 # ==============================================
-# ربات کامل تلگرام با ۳ بازی و سیستم سکه
+# ربات تلگرام با بازی‌ها و سیستم سکه (فقط ادمین)
 # ==============================================
 import logging
 import random
-import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# ---------- تنظیمات اولیه ----------
+# ---------- تنظیمات ----------
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# ---------- دیکشنری ذخیره اطلاعات کاربران ----------
-# کلید: user_id (عدد), مقدار: دیکشنری شامل موجودی و وضعیت بازی
-user_data = {}
+# ========  8552447077 (از @userinfobot بگیر) ========
+ADMIN_ID = 123456789  # <--- این رو با ایدی خودت عوض کن
 
-def get_user(user_id):
-    """دریافت اطلاعات کاربر، اگر نباشه با موجودی ۵۰۰۰۰ ایجاد میکنه"""
+# ======== ذخیره اطلاعات کاربران در حافظه ========
+user_data = {}  # {user_id: {'balance': 0, 'bet_choice': None, 'secret': None}}
+
+def get_user(user_id):@Mmad_mmmj
     if user_id not in user_data:
-        user_data[user_id] = {
-            'balance': 50000,  # موجودی اولیه ۵۰۰۰۰ سکه
-            'game_mode': None,
-            'bet_choice': None,
-            'secret_number': None  # برای بازی حدس عدد
-        }
+        user_data[user_id] = {'balance': 0, 'bet_choice': None, 'secret': None}
     return user_data[user_id]
 
 def get_balance(user_id):
     return get_user(user_id)['balance']
 
-def save_balance(user_id, amount):
-    """افزایش یا کاهش موجودی (مقدار میتونه مثبت یا منفی باشه)"""
+def change_balance(user_id, amount):
     user = get_user(user_id)
-    user['balance'] = max(0, user['balance'] + amount)  # کمتر از صفر نمیشه
+    user['balance'] = max(0, user['balance'] + amount)
     return user['balance']
 
-# ---------- منوی اصلی با دکمه‌های شیشه‌ای ----------
-async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, custom_text=None):
-    """نمایش منوی اصلی با دکمه‌ها"""
+# ======== منوی اصلی ========
+async def main_menu(update, context, text=None):
     user_id = update.effective_user.id
-    balance = get_balance(user_id)
-    
+    bal = get_balance(user_id)
     keyboard = [
         [InlineKeyboardButton("🎲 تاس", callback_data='dice')],
         [InlineKeyboardButton("💰 شرط‌بندی", callback_data='bet')],
@@ -49,261 +40,234 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, custom_t
         [InlineKeyboardButton("❓ راهنما", callback_data='help')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = custom_text or f"🎮 به ربات بازی خوش اومدی!\n💰 سکه‌های تو: {balance}\nیک بازی رو انتخاب کن:"
-    
+    msg = text or f"🎮 خوش اومدی!\n💰 سکه‌های تو: {bal}"
     if update.callback_query:
-        await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
+        await update.callback_query.message.edit_text(msg, reply_markup=reply_markup)
         await update.callback_query.answer()
     else:
-        await update.message.reply_text(text, reply_markup=reply_markup)
+        await update.message.reply_text(msg, reply_markup=reply_markup)
 
-# ---------- دستورات عمومی ----------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ======== دستورات عمومی ========
+async def start(update, context):
     await main_menu(update, context)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_cmd(update, context):
     text = """
-🎮 **راهنمای بازی‌ها:**
+🎮 **بازی‌ها:**
+- تاس: پرتاب تاس، عدد ۶ → ۱۰۰ سکه پاداش
+- شرط‌بندی: زوج/فرد، ضریب ۲
+- حدس عدد: ۱ تا ۱۰، دقیق ضریب ۵ / اختلاف ۱ ضریب ۲
 
-۱) **تاس** 🎲
-- فقط برای سرگرمی، تاس میندازه و عددش رو نشون میده.
-- اگر عدد ۶ بیاد، ۱۰۰ سکه پاداش میگیری!
-
-۲) **شرط‌بندی** 💰
-- روی زوج یا فرد بودن تاس شرط ببند.
-- هر برد، مبلغ شرط × ۲ برنده میشی!
-- حداقل شرط: ۱۰۰ سکه
-
-۳) **حدس عدد** 🎯
-- یک عدد بین ۱ تا ۱۰ رو حدس بزن.
-- اگر درست بزنی، ۵ برابر مبلغ شرط برنده میشی!
-- اگر ۱ عدد اختلاف داشته باشی، ۲ برابر میبری.
-
-💰 هر کاربر جدید ۵۰۰۰۰ سکه هدیه داره!
+💰 سکه رو فقط ادمین میده.
 """
-    await main_menu(update, context, custom_text=text)
+    await main_menu(update, context, text=text)
 
-# ---------- بازی تاس ----------
-async def dice_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ======== بازی تاس ========
+async def dice_game(update, context):
     user_id = update.effective_user.id
-    number = random.randint(1, 6)
-    emojis = {1: '⚀', 2: '⚁', 3: '⚂', 4: '⚃', 5: '⚄', 6: '⚅'}
-    
-    text = f"🎲 تاس انداختم...\n\n{emojis[number]}  عدد **{number}**"
-    
-    if number == 6:
-        save_balance(user_id, 100)
-        text += "\n\n🎉 شانس آوردی! ۱۰۰ سکه پاداش گرفتی!"
-    
+    num = random.randint(1, 6)
+    emojis = {1:'⚀',2:'⚁',3:'⚂',4:'⚃',5:'⚄',6:'⚅'}
+    text = f"🎲 {emojis[num]}  عدد {num}"
+    if num == 6:
+        change_balance(user_id, 100)
+        text += "\n🎉 +۱۰۰ سکه پاداش!"
     await update.callback_query.message.edit_text(text)
     await update.callback_query.answer()
-    
-    # برگشت خودکار به منو بعد از ۳ ثانیه
-    context.job_queue.run_once(back_to_menu, 3, data=update)
+    context.job_queue.run_once(lambda ctx: main_menu(ctx.job.data, ctx), 3, data=update)
 
-async def back_to_menu(context: ContextTypes.DEFAULT_TYPE):
-    await main_menu(context.job.data, context)
-
-# ---------- منوی شرط‌بندی ----------
-async def bet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    balance = get_balance(user_id)
-    
+# ======== شرط‌بندی ========
+async def bet_menu(update, context):
     keyboard = [
-        [InlineKeyboardButton("زوج (ضریب ۲)", callback_data='bet_even')],
-        [InlineKeyboardButton("فرد (ضریب ۲)", callback_data='bet_odd')],
+        [InlineKeyboardButton("زوج", callback_data='bet_even')],
+        [InlineKeyboardButton("فرد", callback_data='bet_odd')],
         [InlineKeyboardButton("🔙 برگشت", callback_data='back')]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = f"💰 شرط‌بندی روی تاس\nسکه‌های تو: {balance}\nروی زوج یا فرد شرط ببند:"
-    await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
+    await update.callback_query.message.edit_text(
+        f"💰 شرط ببند (سکه: {get_balance(update.effective_user.id)})",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
     await update.callback_query.answer()
 
-async def bet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def bet_choice(update, context):
     user_id = update.effective_user.id
-    get_user(user_id)['bet_choice'] = update.callback_query.data  # 'bet_even' یا 'bet_odd'
-    
-    await update.callback_query.message.reply_text("💰 مبلغ شرط رو وارد کن (حداقل ۱۰۰ سکه):")
+    get_user(user_id)['bet_choice'] = update.callback_query.data
+    await update.callback_query.message.reply_text("💰 مبلغ شرط رو عدد وارد کن (حداقل ۱۰۰):")
     await update.callback_query.answer()
     context.user_data['awaiting_bet'] = True
 
-async def handle_bet_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت مبلغ شرط و اجرای بازی"""
-    if not context.user_data.get('awaiting_bet', False):
+async def handle_bet(update, context):
+    if not context.user_data.get('awaiting_bet'):
         return
-    
     user_id = update.effective_user.id
     try:
         amount = int(update.message.text)
-    except ValueError:
-        await update.message.reply_text("❌ لطفاً یه عدد معتبر وارد کن!")
+    except:
+        await update.message.reply_text("❌ عدد معتبر وارد کن!")
         return
-    
-    balance = get_balance(user_id)
     if amount < 100:
-        await update.message.reply_text("❌ حداقل شرط ۱۰۰ سکه است!")
+        await update.message.reply_text("❌ حداقل ۱۰۰ سکه")
         return
-    if amount > balance:
-        await update.message.reply_text(f"❌ سکه کافی نداری! حداکثر {balance} سکه داری.")
+    if amount > get_balance(user_id):
+        await update.message.reply_text("❌ سکه کافی نداری!")
         return
-    
-    # پرتاب تاس
-    number = random.randint(1, 6)
-    is_even = (number % 2 == 0)
+
+    num = random.randint(1, 6)
+    is_even = num % 2 == 0
     choice = get_user(user_id).get('bet_choice', 'bet_even')
-    user_choice_even = (choice == 'bet_even')
-    
-    if (is_even and user_choice_even) or (not is_even and not user_choice_even):
-        win_amount = amount * 2
-        save_balance(user_id, win_amount)
-        result = f"🎉 بردی! {win_amount} سکه بردی!"
+    user_even = (choice == 'bet_even')
+    win = (is_even and user_even) or (not is_even and not user_even)
+
+    if win:
+        change_balance(user_id, amount * 2)
+        result = f"🎉 بردی! {amount*2} سکه"
     else:
-        save_balance(user_id, -amount)
-        result = f"😢 باختی! {amount} سکه از دست دادی."
-    
-    emojis = {1: '⚀', 2: '⚁', 3: '⚂', 4: '⚃', 5: '⚄', 6: '⚅'}
-    text = f"🎲 تاس: {emojis[number]}  عدد {number}\n\n{result}\n💰 سکه‌های جدید: {get_balance(user_id)}"
-    
-    await update.message.reply_text(text)
+        change_balance(user_id, -amount)
+        result = f"😢 باختی! {amount} سکه"
+
+    emojis = {1:'⚀',2:'⚁',3:'⚂',4:'⚃',5:'⚄',6:'⚅'}
+    await update.message.reply_text(f"🎲 {emojis[num]} عدد {num}\n{result}\n💰 سکه: {get_balance(user_id)}")
     context.user_data['awaiting_bet'] = False
     await main_menu(update, context)
 
-# ---------- بازی حدس عدد ----------
-async def guess_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """منوی بازی حدس عدد"""
+# ======== حدس عدد ========
+async def guess_menu(update, context):
     user_id = update.effective_user.id
-    balance = get_balance(user_id)
-    
-    # تولید عدد تصادفی و ذخیره برای این کاربر
-    get_user(user_id)['secret_number'] = random.randint(1, 10)
-    
-    text = f"🎯 بازی حدس عدد!\nیک عدد بین ۱ تا ۱۰ رو حدس بزن.\n💰 سکه‌های تو: {balance}\nمبلغ شرط رو وارد کن (حداقل ۱۰۰):"
-    await update.callback_query.message.edit_text(text)
+    get_user(user_id)['secret'] = random.randint(1, 10)
+    await update.callback_query.message.reply_text("🎯 مبلغ شرط رو عدد وارد کن (حداقل ۱۰۰):")
     await update.callback_query.answer()
-    context.user_data['awaiting_guess'] = True
+    context.user_data['awaiting_guess_amount'] = True
 
-async def handle_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت حدس کاربر و بررسی نتیجه"""
-    if not context.user_data.get('awaiting_guess', False):
+async def handle_guess(update, context):
+    if not context.user_data.get('awaiting_guess_amount'):
         return
-    
+    user_id = update.effective_user.id
+    try:
+        amount = int(update.message.text)
+    except:
+        await update.message.reply_text("❌ عدد معتبر وارد کن!")
+        return
+    if amount < 100:
+        await update.message.reply_text("❌ حداقل ۱۰۰ سکه")
+        return
+    if amount > get_balance(user_id):
+        await update.message.reply_text("❌ سکه کافی نداری!")
+        return
+
+    context.user_data['guess_amount'] = amount
+    context.user_data['awaiting_guess_amount'] = False
+    context.user_data['awaiting_guess_number'] = True
+    await update.message.reply_text("🎯 حالا عدد ۱ تا ۱۰ رو حدس بزن:")
+
+async def handle_guess_number(update, context):
+    if not context.user_data.get('awaiting_guess_number'):
+        return
     user_id = update.effective_user.id
     try:
         guess = int(update.message.text)
         if guess < 1 or guess > 10:
-            await update.message.reply_text("❌ عدد باید بین ۱ تا ۱۰ باشه!")
+            await update.message.reply_text("❌ بین ۱ تا ۱۰ باشه!")
             return
-    except ValueError:
-        await update.message.reply_text("❌ لطفاً یه عدد معتبر وارد کن!")
-        return
-    
-    # دریافت مبلغ شرط (کاربر باید دوباره عدد وارد کنه)
-    try:
-        amount = int(update.message.text)  # فعلاً اینجا همونه، ولی بهتره جداگانه بپرسیم
     except:
-        await update.message.reply_text("❌ لطفاً مبلغ شرط رو به صورت عدد وارد کن!")
+        await update.message.reply_text("❌ عدد معتبر وارد کن!")
         return
-    
-    # برای سادگی، از کاربر میخوایم که اول مبلغ رو وارد کنه، بعد عدد رو
-    # اما اینجا یه روش ساده‌تر: کاربر دو عدد پشت سر هم وارد میکنه
-    # برای رفع این مشکل، یه حالت بهتر مینویسیم:
-    if not context.user_data.get('guess_amount_set'):
-        context.user_data['guess_amount'] = guess  # اینجا اولین عدد رو به عنوان مبلغ در نظر میگیره
-        context.user_data['guess_amount_set'] = True
-        await update.message.reply_text("🎯 حالا عدد ۱ تا ۱۰ رو حدس بزن:")
-        return
-    
-    # این قسمت برای دریافت حدس هست
-    secret = get_user(user_id).get('secret_number', random.randint(1, 10))
+
+    secret = get_user(user_id).get('secret', random.randint(1,10))
     amount = context.user_data.get('guess_amount', 100)
-    
-    if amount < 100:
-        await update.message.reply_text("❌ حداقل شرط ۱۰۰ سکه است!")
-        context.user_data['awaiting_guess'] = False
-        context.user_data['guess_amount_set'] = False
-        return
-    
-    balance = get_balance(user_id)
-    if amount > balance:
-        await update.message.reply_text(f"❌ سکه کافی نداری! حداکثر {balance} سکه داری.")
-        context.user_data['awaiting_guess'] = False
-        context.user_data['guess_amount_set'] = False
-        return
-    
-    # بررسی نتیجه
     diff = abs(guess - secret)
+
     if diff == 0:
-        win_amount = amount * 5
-        save_balance(user_id, win_amount)
-        result = f"🎯 دقیقاً درست گفتی! {win_amount} سکه بردی!"
+        win = amount * 5
+        change_balance(user_id, win)
+        result = f"🎯 دقیق! {win} سکه بردی!"
     elif diff == 1:
-        win_amount = amount * 2
-        save_balance(user_id, win_amount)
-        result = f"👏 نزدیک بود! {win_amount} سکه بردی!"
+        win = amount * 2
+        change_balance(user_id, win)
+        result = f"👏 نزدیک! {win} سکه بردی!"
     else:
-        save_balance(user_id, -amount)
-        result = f"😢 اشتباه! عدد من {secret} بود. {amount} سکه باختی."
-    
-    text = f"🎯 عدد تو: {guess}\nعدد درست: {secret}\n\n{result}\n💰 سکه‌های جدید: {get_balance(user_id)}"
-    await update.message.reply_text(text)
-    
-    context.user_data['awaiting_guess'] = False
-    context.user_data['guess_amount_set'] = False
+        change_balance(user_id, -amount)
+        result = f"😢 عدد من {secret} بود. {amount} سکه باختی."
+
+    await update.message.reply_text(f"{result}\n💰 سکه: {get_balance(user_id)}")
+    context.user_data['awaiting_guess_number'] = False
+    context.user_data['guess_amount'] = 0
     await main_menu(update, context)
 
-# ---------- نمایش موجودی ----------
-async def show_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ======== نمایش موجودی ========
+async def show_balance(update, context):
     user_id = update.effective_user.id
-    balance = get_balance(user_id)
-    text = f"💰 سکه‌های شما: {balance}"
     keyboard = [[InlineKeyboardButton("🔙 برگشت", callback_data='back')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
+    await update.callback_query.message.edit_text(
+        f"💰 سکه‌های تو: {get_balance(user_id)}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
     await update.callback_query.answer()
 
-# ---------- دکمه برگشت به منو ----------
-async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ======== برگشت به منو ========
+async def back(update, context):
     await main_menu(update, context)
 
-# ---------- دکمه‌های ناشناخته ----------
-async def unknown_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer("❌ گزینه نامعتبر!", show_alert=True)
-
-# ---------- تابع اصلی ----------
-def main():
-    """راه‌اندازی ربات"""
-    TOKEN = "توکن_ربات_خود_را_اینجا_قرار_دهید"
-    
-    if TOKEN == "توکن_ربات_خود_را_اینجا_قرار_دهید":
-        print("⚠️ لطفاً ابتدا توکن ربات خود را در کد قرار دهید!")
+# ======== دستورات ادمین (فقط خودت) ========
+async def add_coin(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ فقط ادمین!")
         return
-    
+    try:
+        amount = int(context.args[0])
+        user_id = update.effective_user.id
+        change_balance(user_id, amount)
+        await update.message.reply_text(f"✅ {amount} سکه اضافه شد. موجودی: {get_balance(user_id)}")
+    except:
+        await update.message.reply_text("❌ دستور: /addcoin 500")
+
+async def set_coin(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ فقط ادمین!")
+        return
+    try:
+        amount = int(context.args[0])
+        user_id = update.effective_user.id
+        get_user(user_id)['balance'] = amount
+        await update.message.reply_text(f"✅ موجودی تنظیم شد: {amount}")
+    except:
+        await update.message.reply_text("❌ دستور: /setcoin 50000")
+
+# ======== دکمه‌های ناشناخته ========
+async def unknown(update, context):
+    await update.callback_query.answer("❌ نامعتبر!", show_alert=True)
+
+# ======== اصلی ========
+def main():
+    TOKEN = "توکن_ربات_خود_را_اینجا_بذار"
+    if TOKEN == "توکن_ربات_خود_را_اینجا_بذار":
+        print("⚠️ توکن رو بذار!")
+        return
+
     app = Application.builder().token(TOKEN).build()
-    
-    # دستورات
+
+    # دستورات عمومی
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    
-    # دکمه‌های شیشه‌ای
+    app.add_handler(CommandHandler("help", help_cmd))
+
+    # دستورات ادمین
+    app.add_handler(CommandHandler("addcoin", add_coin))
+    app.add_handler(CommandHandler("setcoin", set_coin))
+
+    # دکمه‌ها
     app.add_handler(CallbackQueryHandler(dice_game, pattern='^dice$'))
     app.add_handler(CallbackQueryHandler(bet_menu, pattern='^bet$'))
     app.add_handler(CallbackQueryHandler(bet_choice, pattern='^bet_even|bet_odd$'))
     app.add_handler(CallbackQueryHandler(guess_menu, pattern='^guess$'))
     app.add_handler(CallbackQueryHandler(show_balance, pattern='^balance$'))
-    app.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
-    app.add_handler(CallbackQueryHandler(back_to_main, pattern='^back$'))
-    app.add_handler(CallbackQueryHandler(unknown_callback))  # دکمه‌های ناشناخته
-    
-    # دریافت ورودی‌های متنی از کاربر (برای شرط‌بندی و حدس عدد)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bet_amount))
+    app.add_handler(CallbackQueryHandler(help_cmd, pattern='^help$'))
+    app.add_handler(CallbackQueryHandler(back, pattern='^back$'))
+    app.add_handler(CallbackQueryHandler(unknown))
+
+    # پیام‌های متنی (برای شرط و حدس)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bet))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guess))
-    # توجه: این دو هندلر باهم تداخل دارن، بهتره یکی رو غیرفعال کنی یا ترکیبشون کنی
-    # ولی برای سادگی، هر دو رو میذاریم (آخرینش اجرا میشه)
-    
-    print("✅ ربات روشن شد!")
-    print("🎮 برای شروع، در تلگرام دستور /start رو بزن.")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guess_number))
+
+    print("✅ ربات روشن شد! دستورات ادمین: /addcoin و /setcoin")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":

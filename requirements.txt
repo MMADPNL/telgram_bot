@@ -1,7 +1,1 @@
-print("Python OK ✅")
-
-a = 10
-b = 20
-
-print("جمع:", a + b)
-print("پایتون درست کار می‌کند ✅")
+python-telegram-bot==22.5

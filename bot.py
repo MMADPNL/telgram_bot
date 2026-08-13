@@ -330,9 +330,6 @@ async def start_game(update, game_type, rounds, bet):
         user_balance - total_bet
     )
 
-    games[user_id] = {
-        "type": game_type,
-        games[user_id] = 
 games[user_id] = {
     "type": game_type,
     "emoji": EMOJI[game_type],

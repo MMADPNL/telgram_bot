@@ -11,7 +11,7 @@ TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"  # توکن ربات
 
 user_data = {}
 
-def get_user(user_id):@Mmad_mmmj
+def get_user(user_id):
     if user_id not in user_data:
         user_data[user_id] = {'balance': 0, 'bet_choice': None, 'secret': None}
     return user_data[user_id]

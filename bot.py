@@ -659,10 +659,10 @@ def main():
 
     # پیام‌های متنی
     app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            messages
-        )
+    MessageHandler(
+        filters.ALL,
+        user_throw
+    )
     )
 
     print("BOT STARTED")

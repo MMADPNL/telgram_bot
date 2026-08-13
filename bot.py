@@ -645,3 +645,55 @@ def main():
 
 if __name__ == "__main__":
     main()
+async def deduct(update: Update, amount):
+    admin_id = update.effective_user.id
+
+    # فقط صاحب ربات
+    if admin_id != OWNER_ID:
+        await update.message.reply_text(
+            "❌ این دستور فقط برای صاحب ربات است."
+        )
+        return
+
+    # باید روی پیام کاربر ریپلای شده باشد
+    if not update.message.reply_to_message:
+        await update.message.reply_text(
+            "❌ روی پیام کاربر ریپلای کن.\n\n"
+            "مثال:\n"
+            "کسر 500"
+        )
+        return
+
+    target = update.message.reply_to_message.from_user
+
+    if target.is_bot:
+        await update.message.reply_text(
+            "❌ نمی‌توانی موجودی ربات را کم کنی."
+        )
+        return
+
+    if amount <= 0:
+        await update.message.reply_text(
+            "❌ مبلغ باید بیشتر از صفر باشد."
+        )
+        return
+
+    balance = get_coins(target.id)
+
+    if amount > balance:
+        await update.message.reply_text(
+            f"❌ موجودی کاربر کافی نیست.\n\n"
+            f"💰 موجودی فعلی: {balance:,} 🪙"
+        )
+        return
+
+    new_balance = balance - amount
+
+    set_coins(target.id, new_balance)
+
+    await update.message.reply_text(
+        "✅ موجودی کم شد.\n\n"
+        f"👤 کاربر: {target.first_name}\n"
+        f"➖ مبلغ: {amount:,} 🪙\n"
+        f"💰 موجودی جدید: {new_balance:,} 🪙"
+    )

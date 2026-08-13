@@ -14,34 +14,29 @@ TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = 8552447077
 
 DB = "bot_data.db"
+
 START_COINS = 100000
 MIN_BET = 100
 MAX_ROUNDS = 3
 
-GAMES = {
-    "تاس": {
-        "type": "dice",
+
+GAME_SETTINGS = {
+    "dice": {
         "emoji": "🎲",
         "max_bet": 3000,
     },
-    "بولینگ": {
-        "type": "bowling",
+    "bowling": {
         "emoji": "🎳",
         "max_bet": 10000,
     },
-    "بستکبال": {
-        "type": "basketball",
-        "emoji": "🏀",
-        "max_bet": 10000,
-    },
-    "بسکتبال": {
-        "type": "basketball",
+    "basketball": {
         "emoji": "🏀",
         "max_bet": 10000,
     },
 }
 
-games = {}
+
+active_games = {}
 
 
 # =========================================================
@@ -61,13 +56,13 @@ def init_db():
 def balance(user_id):
     with sqlite3.connect(DB) as con:
         row = con.execute(
-            "SELECT coins FROM users WHERE user_id=?",
+            "SELECT coins FROM users WHERE user_id = ?",
             (user_id,)
         ).fetchone()
 
         if row is None:
             con.execute(
-                "INSERT INTO users(user_id, coins) VALUES(?, ?)",
+                "INSERT INTO users (user_id, coins) VALUES (?, ?)",
                 (user_id, START_COINS)
             )
             return START_COINS
@@ -80,10 +75,10 @@ def set_balance(user_id, amount):
 
     with sqlite3.connect(DB) as con:
         con.execute("""
-            INSERT INTO users(user_id, coins)
-            VALUES(?, ?)
+            INSERT INTO users (user_id, coins)
+            VALUES (?, ?)
             ON CONFLICT(user_id)
-            DO UPDATE SET coins=excluded.coins
+            DO UPDATE SET coins = excluded.coins
         """, (user_id, amount))
 
 
@@ -109,24 +104,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🤖 ربات آماده است!\n\n"
         f"💰 موجودی: {balance(user_id):,} 🪙\n\n"
 
-        "🎲 تاس:\n"
+        "🎲 تاس\n"
         "1تاس 100\n"
         "3تاس 100\n\n"
 
-        "🎳 بولینگ:\n"
+        "🎳 بولینگ\n"
         "1بولینگ 100\n"
         "3بولینگ 100\n\n"
 
-        "🏀 بسکتبال:\n"
+        "🏀 بسکتبال\n"
         "1بستکبال 100\n"
         "3بستکبال 100\n\n"
 
         "━━━━━━━━━━━━\n\n"
-        "💰 حداقل شرط: 100\n"
-        "🎮 حداکثر دور: 3\n\n"
 
-        "بعد از پرتاب ربات، روی پیام راهنما ریپلای کن "
-        "و همان ایموجی را بفرست."
+        "⚠️ بعد از اینکه ربات انداخت، "
+        "حتماً روی پیام راهنما ریپلای کن "
+        "و همان ایموجی را بنداز."
     )
 
 
@@ -140,7 +134,7 @@ async def coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        f"💰 موجودی شما:\n"
+        f"💰 موجودی شما:\n\n"
         f"{balance(update.effective_user.id):,} 🪙"
     )
 
@@ -151,7 +145,7 @@ async def coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def transfer(update, amount):
 
-    sender = update.effective_user
+    sender_id = update.effective_user.id
     reply = update.message.reply_to_message
 
     if reply is None:
@@ -169,7 +163,7 @@ async def transfer(update, amount):
         )
         return
 
-    if receiver.id == sender.id:
+    if receiver.id == sender_id:
         await update.message.reply_text(
             "❌ نمی‌توانی به خودت انتقال بدهی."
         )
@@ -181,7 +175,7 @@ async def transfer(update, amount):
         )
         return
 
-    sender_balance = balance(sender.id)
+    sender_balance = balance(sender_id)
 
     if sender_balance < amount:
         await update.message.reply_text(
@@ -191,7 +185,7 @@ async def transfer(update, amount):
         return
 
     set_balance(
-        sender.id,
+        sender_id,
         sender_balance - amount
     )
 
@@ -204,7 +198,7 @@ async def transfer(update, amount):
         "✅ انتقال انجام شد!\n\n"
         f"👤 {receiver.first_name}\n"
         f"💸 {amount:,} 🪙\n"
-        f"💰 موجودی شما: {balance(sender.id):,} 🪙"
+        f"💰 موجودی شما: {balance(sender_id):,} 🪙"
     )
 
 
@@ -216,7 +210,7 @@ async def deduct(update, amount):
 
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text(
-            "❌ فقط صاحب ربات."
+            "❌ فقط صاحب ربات می‌تواند کسر کند."
         )
         return
 
@@ -240,22 +234,22 @@ async def deduct(update, amount):
         )
         return
 
-    old = balance(user.id)
+    old_balance = balance(user.id)
 
-    if old < amount:
+    if old_balance < amount:
         await update.message.reply_text(
             f"❌ موجودی کافی نیست.\n"
-            f"💰 {old:,} 🪙"
+            f"💰 موجودی: {old_balance:,} 🪙"
         )
         return
 
     set_balance(
         user.id,
-        old - amount
+        old_balance - amount
     )
 
     await update.message.reply_text(
-        "✅ کسر شد!\n\n"
+        "✅ موجودی کسر شد!\n\n"
         f"👤 {user.first_name}\n"
         f"➖ {amount:,} 🪙\n"
         f"💰 موجودی جدید: {balance(user.id):,} 🪙"
@@ -270,21 +264,13 @@ async def start_game(update, game_type, rounds, bet):
 
     user_id = update.effective_user.id
 
-    if user_id in games:
+    if user_id in active_games:
         await update.message.reply_text(
             "❌ بازی قبلی هنوز تمام نشده."
         )
         return
 
-    settings = None
-
-    for value in GAMES.values():
-        if value["type"] == game_type:
-            settings = value
-            break
-
-    if settings is None:
-        return
+    settings = GAME_SETTINGS[game_type]
 
     emoji = settings["emoji"]
     max_bet = settings["max_bet"]
@@ -318,29 +304,28 @@ async def start_game(update, game_type, rounds, bet):
         )
         return
 
-    # کل شرط از ابتدا یک بار کم می‌شود
     set_balance(
         user_id,
         money - total_bet
     )
 
-    games[user_id] = {
-        "type": game_type,
+    active_games[user_id] = {
+        "game_type": game_type,
         "emoji": emoji,
         "rounds": rounds,
-        "round": 1,
+        "current_round": 1,
         "bet": bet,
         "bot_score": None,
         "wins": 0,
         "losses": 0,
         "draws": 0,
-        "waiting": False,
-        "prompt_id": None,
+        "waiting_for_user": False,
+        "prompt_message_id": None,
     }
 
     await update.message.reply_text(
         f"{emoji} بازی شروع شد!\n\n"
-        f"🎮 دورها: {rounds}\n"
+        f"🎮 تعداد دور: {rounds}\n"
         f"💸 شرط هر دور: {bet:,} 🪙\n"
         f"💰 کل شرط: {total_bet:,} 🪙\n\n"
         f"🤖 ربات اول {emoji} می‌اندازد..."
@@ -356,33 +341,37 @@ async def start_game(update, game_type, rounds, bet):
 async def bot_throw(update):
 
     user_id = update.effective_user.id
-    game = games.get(user_id)
+    game = active_games.get(user_id)
 
     if game is None:
         return
 
     emoji = game["emoji"]
 
-    game["waiting"] = False
+    game["waiting_for_user"] = False
     game["bot_score"] = None
-    game["prompt_id"] = None
+    game["prompt_message_id"] = None
 
     # پرتاب ربات
-    dice_message = await update.message.reply_dice(
+    bot_message = await update.message.reply_dice(
         emoji=emoji
     )
 
-    game["bot_score"] = dice_message.dice.value
+    game["bot_score"] = bot_message.dice.value
 
-    # پیام جداگانه و مشخص برای Reply
+    # پیام راهنمای قابل Reply
     prompt = await update.message.reply_text(
-        f"🤖 ربات: {game['bot_score']}\n\n"
-        f"👤 حالا روی همین پیام ریپلای کن و {emoji} بنداز.\n"
+        f"🤖 نتیجه ربات: {game['bot_score']}\n\n"
+        f"👤 حالا روی همین پیام ریپلای کن و "
+        f"{emoji} رو بنداز.\n\n"
         f"⚠️ بدون ریپلای، پرتاب قبول نمی‌شود."
     )
 
-    game["prompt_id"] = prompt.message_id
-    game["waiting"] = True
+    # ذخیره ID دقیق پیام راهنما
+    game["prompt_message_id"] = prompt.message_id
+
+    # حالا کاربر می‌تواند پرتاب کند
+    game["waiting_for_user"] = True
 
 
 # =========================================================
@@ -394,60 +383,71 @@ async def user_throw(update, context):
     if not update.message:
         return
 
-    dice = update.message.dice
-
-    if dice is None:
+    if update.message.dice is None:
         return
 
     user_id = update.effective_user.id
-    game = games.get(user_id)
+
+    game = active_games.get(user_id)
 
     if game is None:
         return
 
-    # =====================================================
-    # باید نوبت کاربر باشد
-    # =====================================================
-
-    if game["waiting"] is not True:
+    # هنوز نوبت کاربر نیست
+    if game["waiting_for_user"] is not True:
         return
 
+    dice = update.message.dice
+
+    expected_emoji = game["emoji"]
+
     # =====================================================
-    # باید Reply باشد
+    # حتماً باید Reply باشد
     # =====================================================
 
     reply = update.message.reply_to_message
 
     if reply is None:
-        await update.message.reply_text(
-            f"❌ اول روی پیام ربات ریپلای کن، "
-            f"بعد {game['emoji']} بنداز."
-        )
-        return
 
-    # فقط پیام راهنمای همین دور
-    if reply.message_id != game["prompt_id"]:
         await update.message.reply_text(
-            f"❌ روی پیام آخر ربات ریپلای کن، "
-            f"بعد {game['emoji']} بنداز."
+            f"❌ اول روی پیام ربات ریپلای کن "
+            f"و بعد {expected_emoji} رو بنداز."
         )
+
         return
 
     # =====================================================
-    # ایموجی درست
+    # Reply باید پیام راهنمای همین دور باشد
     # =====================================================
 
-    if dice.emoji != game["emoji"]:
+    if reply.message_id != game["prompt_message_id"]:
 
         await update.message.reply_text(
-            f"❌ الان بازی {game['emoji']} است.\n"
-            f"لطفاً روی پیام ربات ریپلای کن و "
-            f"{game['emoji']} بنداز."
+            f"❌ روی پیام آخر ربات ریپلای کن "
+            f"و بعد {expected_emoji} رو بنداز."
         )
+
         return
 
+    # =====================================================
+    # ایموجی باید دقیقاً همان بازی باشد
+    # =====================================================
+
+    if dice.emoji != expected_emoji:
+
+        await update.message.reply_text(
+            f"❌ الان بازی {expected_emoji} است.\n"
+            f"لطفاً روی پیام ربات ریپلای کن "
+            f"و {expected_emoji} رو بنداز."
+        )
+
+        return
+
+    # =====================================================
     # قفل فوری
-    game["waiting"] = False
+    # =====================================================
+
+    game["waiting_for_user"] = False
 
     bot_score = game["bot_score"]
 
@@ -458,7 +458,7 @@ async def user_throw(update, context):
     bet = game["bet"]
 
     # =====================================================
-    # RESULT
+    # WIN
     # =====================================================
 
     if user_score > bot_score:
@@ -470,13 +470,27 @@ async def user_throw(update, context):
             bet * 2
         )
 
-        result = f"🏆 بردی!\n➕ {bet * 2:,} 🪙"
+        result = (
+            "🏆 بردی!\n"
+            f"➕ {bet * 2:,} 🪙"
+        )
+
+    # =====================================================
+    # LOSS
+    # =====================================================
 
     elif user_score < bot_score:
 
         game["losses"] += 1
 
-        result = f"😢 باختی!\n➖ {bet:,} 🪙"
+        result = (
+            "😢 باختی!\n"
+            f"➖ {bet:,} 🪙"
+        )
+
+    # =====================================================
+    # DRAW
+    # =====================================================
 
     else:
 
@@ -487,30 +501,47 @@ async def user_throw(update, context):
             bet
         )
 
-        result = f"🤝 مساوی!\n↩️ {bet:,} 🪙 برگشت"
+        result = (
+            "🤝 مساوی!\n"
+            f"↩️ {bet:,} 🪙 برگشت"
+        )
+
+    # =====================================================
+    # RESULT
+    # =====================================================
 
     await update.message.reply_text(
-        f"🎮 دور {game['round']} از {game['rounds']}\n\n"
+        f"🎮 دور {game['current_round']} "
+        f"از {game['rounds']}\n\n"
+
         f"🤖 ربات: {bot_score}\n"
         f"👤 تو: {user_score}\n\n"
+
         f"{result}\n\n"
-        f"💰 موجودی: {balance(user_id):,} 🪙"
+
+        f"💰 موجودی: "
+        f"{balance(user_id):,} 🪙"
     )
 
     # =====================================================
     # NEXT ROUND
     # =====================================================
 
-    if game["round"] < game["rounds"]:
+    if game["current_round"] < game["rounds"]:
 
-        game["round"] += 1
+        game["current_round"] += 1
+        game["waiting_for_user"] = False
+        game["bot_score"] = None
+        game["prompt_message_id"] = None
 
         await update.message.reply_text(
-            f"🎮 دور {game['round']} از {game['rounds']}\n\n"
-            f"🤖 ربات اول {game['emoji']} می‌اندازد..."
+            f"🎮 دور {game['current_round']} "
+            f"از {game['rounds']}\n\n"
+            f"🤖 ربات اول {expected_emoji} می‌اندازد..."
         )
 
         await bot_throw(update)
+
         return
 
     # =====================================================
@@ -519,18 +550,20 @@ async def user_throw(update, context):
 
     await update.message.reply_text(
         "🏁 بازی تمام شد!\n\n"
+
         f"🏆 برد: {game['wins']}\n"
         f"😢 باخت: {game['losses']}\n"
         f"🤝 مساوی: {game['draws']}\n\n"
+
         f"💰 موجودی نهایی: "
         f"{balance(user_id):,} 🪙"
     )
 
-    games.pop(user_id, None)
+    active_games.pop(user_id, None)
 
 
 # =========================================================
-# TEXT
+# TEXT MESSAGES
 # =========================================================
 
 async def messages(update, context):
@@ -548,7 +581,10 @@ async def messages(update, context):
 
     text = text.strip()
 
-    # انتقال
+    # =====================================================
+    # TRANSFER
+    # =====================================================
+
     if text.startswith("انتقال "):
 
         parts = text.split()
@@ -568,9 +604,13 @@ async def messages(update, context):
             return
 
         await transfer(update, amount)
+
         return
 
-    # کسر
+    # =====================================================
+    # DEDUCT
+    # =====================================================
+
     if text.startswith("کسر "):
 
         parts = text.split()
@@ -590,9 +630,13 @@ async def messages(update, context):
             return
 
         await deduct(update, amount)
+
         return
 
-    # بازی
+    # =====================================================
+    # GAME
+    # =====================================================
+
     parts = text.split()
 
     if len(parts) != 2:
@@ -605,42 +649,69 @@ async def messages(update, context):
     except ValueError:
         return
 
+    if not command:
+        return
+
+    # فقط عدد اول
     if not command[0].isdigit():
         return
 
     rounds = int(command[0])
 
     if rounds < 1 or rounds > 3:
+
         await update.message.reply_text(
             "❌ تعداد دور باید بین 1 تا 3 باشد."
         )
+
         return
 
-    if "تاس" in command:
+    # =====================================================
+    # DICE
+    # =====================================================
+
+    if command.endswith("تاس"):
+
         await start_game(
             update,
             "dice",
             rounds,
             bet
         )
+
         return
 
-    if "بولینگ" in command:
+    # =====================================================
+    # BOWLING
+    # =====================================================
+
+    if command.endswith("بولینگ"):
+
         await start_game(
             update,
             "bowling",
             rounds,
             bet
         )
+
         return
 
-    if "بستکبال" in command or "بسکتبال" in command:
+    # =====================================================
+    # BASKETBALL
+    # =====================================================
+
+    if (
+        command.endswith("بستکبال")
+        or command.endswith("بسکتبال")
+    ):
+
         await start_game(
             update,
             "basketball",
             rounds,
             bet
         )
+
         return
 
 
@@ -673,7 +744,7 @@ def main():
         )
     )
 
-    # پرتاب‌های واقعی تلگرام
+    # Dice / Bowling / Basketball
     app.add_handler(
         MessageHandler(
             filters.Dice.ALL,
@@ -681,7 +752,7 @@ def main():
         )
     )
 
-    # پیام‌های متنی
+    # Text
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,

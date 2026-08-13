@@ -169,3 +169,42 @@ async def all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         all_messages
     )
 )
+# ===== FIX / ANTI-BUG =====
+
+try:
+    init_db()
+except Exception as e:
+    print("Database error:", e)
+
+# جلوگیری از خراب شدن موجودی
+def safe_get_coins(user_id):
+    try:
+        return int(get_coins(user_id))
+    except Exception:
+        return 0
+
+
+def safe_set_coins(user_id, amount):
+    try:
+        amount = max(0, int(amount))
+        set_coins(user_id, amount)
+        return True
+    except Exception as e:
+        print("Balance error:", e)
+        return False
+
+
+# جلوگیری از کرش کردن پیام‌ها
+async def error_safe_handler(update, context):
+    try:
+        await all_messages(update, context)
+    except Exception as e:
+        print("Message error:", e)
+
+
+app.add_handler(
+    MessageHandler(
+        filters.ALL,
+        error_safe_handler
+    )
+)

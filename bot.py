@@ -332,7 +332,8 @@ async def start_game(update, game_type, rounds, bet):
 
     games[user_id] = {
         "type": game_type,
-        games[user_id] = {
+        games[user_id] = 
+games[user_id] = {
     "type": game_type,
     "emoji": EMOJI[game_type],
     "rounds": rounds,
@@ -343,4 +344,4 @@ async def start_game(update, game_type, rounds, bet):
     "wins": 0,
     "losses": 0,
     "draws": 0,
-    }
+}

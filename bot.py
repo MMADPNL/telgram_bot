@@ -39,6 +39,7 @@ GAME_SETTINGS = {
     },
 }
 
+
 active_games = {}
 
 
@@ -167,6 +168,9 @@ async def transfer(update, amount):
     receiver = reply.from_user
 
     if receiver is None or receiver.is_bot:
+        await update.message.reply_text(
+            "❌ گیرنده معتبر نیست."
+        )
         return
 
     if receiver.id == sender_id:
@@ -232,6 +236,9 @@ async def deduct(update, amount):
     user = reply.from_user
 
     if user is None or user.is_bot:
+        await update.message.reply_text(
+            "❌ کاربر معتبر نیست."
+        )
         return
 
     if amount <= 0:
@@ -276,6 +283,9 @@ async def start_game(update, game_type, rounds, bet):
         )
         return
 
+    if game_type not in GAME_SETTINGS:
+        return
+
     settings = GAME_SETTINGS[game_type]
 
     emoji = settings["emoji"]
@@ -311,7 +321,7 @@ async def start_game(update, game_type, rounds, bet):
         )
         return
 
-    # کل شرط فقط یک بار کم می‌شود
+    # کل شرط بازی فقط یک بار کم می‌شود
     set_balance(
         user_id,
         current_balance - total_bet
@@ -335,7 +345,7 @@ async def start_game(update, game_type, rounds, bet):
 
         "waiting_for_user": False,
 
-        # آیدی پیام راهنمایی که کاربر باید روی آن ریپلای کند
+        # فقط همین پیام برای پرتاب کاربر معتبر است
         "user_prompt_id": None,
     }
 
@@ -375,17 +385,16 @@ async def bot_throw(update):
 
     game["bot_score"] = dice_message.dice.value
 
-    # پیام راهنمای مخصوص همین دور
+    # پیام راهنما
     prompt = await update.message.reply_text(
-        f"🤖 ربات: {game['bot_score']}\n\n"
-        f"👤 حالا روی همین پیام ریپلای کن و {emoji} بنداز!\n\n"
-        f"⚠️ فقط پرتابی که روی این پیام ریپلای شده باشد قبول می‌شود."
+        f"🤖 نتیجه ربات: {game['bot_score']}\n\n"
+        f"👤 حالا روی همین پیام ریپلای کن و {emoji} بنداز.\n\n"
+        f"⚠️ فقط پرتابی که روی همین پیام ریپلای شده باشد قبول می‌شود."
     )
 
     # ذخیره آیدی پیام راهنما
     game["user_prompt_id"] = prompt.message_id
 
-    # کاربر حالا اجازه پرتاب دارد
     game["waiting_for_user"] = True
 
 
@@ -426,7 +435,7 @@ async def user_throw(update, context):
         )
         return
 
-    # فقط Reply به پیام راهنمای همین دور قبول است
+    # فقط Reply به پیام راهنمای همین دور
     if reply.message_id != game["user_prompt_id"]:
         await update.message.reply_text(
             f"❌ روی پیام آخر ربات ریپلای کن، "
@@ -448,10 +457,7 @@ async def user_throw(update, context):
         )
         return
 
-    # =====================================================
     # قفل فوری برای جلوگیری از پرتاب دوم
-    # =====================================================
-
     game["waiting_for_user"] = False
 
     bot_score = game["bot_score"]
@@ -489,7 +495,6 @@ async def user_throw(update, context):
 
         game["losses"] += 1
 
-        # شرط قبلاً کم شده
         result = (
             "😢 باختی!\n"
             f"➖ {bet:,} 🪙"
@@ -503,7 +508,6 @@ async def user_throw(update, context):
 
         game["draws"] += 1
 
-        # فقط شرط همین دور برمی‌گردد
         add_balance(
             user_id,
             bet
@@ -548,7 +552,7 @@ async def user_throw(update, context):
         return
 
     # =====================================================
-    # GAME FINISHED
+    # FINISH
     # =====================================================
 
     await update.message.reply_text(
@@ -572,7 +576,6 @@ async def messages(update, context):
     if update.message is None:
         return
 
-    # Dice اینجا پردازش نمی‌شود
     if update.message.dice is not None:
         return
 
@@ -654,8 +657,18 @@ async def messages(update, context):
 
     rounds = int(command[0])
 
-    # تاس
+    if rounds < 1 or rounds > MAX_ROUNDS:
+        await update.message.reply_text(
+            "❌ تعداد دور باید بین 1 تا 3 باشد."
+        )
+        return
+
+    # =====================================================
+    # DICE
+    # =====================================================
+
     if "تاس" in command:
+
         await start_game(
             update,
             "dice",
@@ -664,8 +677,12 @@ async def messages(update, context):
         )
         return
 
-    # بولینگ
+    # =====================================================
+    # BOWLING
+    # =====================================================
+
     if "بولینگ" in command:
+
         await start_game(
             update,
             "bowling",
@@ -674,8 +691,12 @@ async def messages(update, context):
         )
         return
 
-    # بسکتبال
+    # =====================================================
+    # BASKETBALL
+    # =====================================================
+
     if "بستکبال" in command or "بسکتبال" in command:
+
         await start_game(
             update,
             "basketball",

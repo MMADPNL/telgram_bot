@@ -607,6 +607,30 @@ if not TOKEN:
 app = Application.builder().token(TOKEN).build()
 
 app.add_handler(
+    CommandHandler("start", start)
+)
+
+app.add_handler(
+    CommandHandler("coins", coins)
+)
+
+app.add_handler(
+    MessageHandler(
+        filters.Dice.ALL,
+        user_throw
+    )
+)
+
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        all_messages
+    )
+)
+
+print("BOT STARTED")
+
+app.run_polling()
     CommandHandler
 
 

@@ -1,0 +1,14 @@
+if text.startswith("کسر "):
+
+    parts = text.split()
+
+    if len(parts) != 2:
+        return
+
+    try:
+        amount = int(parts[1])
+    except ValueError:
+        return
+
+    await deduct(update, amount)
+    return

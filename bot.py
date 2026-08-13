@@ -1,19 +1,15 @@
-# ==============================================
-# ربات تلگرام با بازی‌ها و سیستم سکه (فقط ادمین)
-# ==============================================
 import logging
 import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# ---------- تنظیمات ----------
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# ========  8552447077 (از @userinfobot بگیر) ========
-ADMIN_ID = 123456789  # <--- این رو با ایدی خودت عوض کن
+# ======== ========
+ADMIN_ID = 123456789  #  8552447077
+TOKEN =8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM
 
-# ======== ذخیره اطلاعات کاربران در حافظه ========
-user_data = {}  # {user_id: {'balance': 0, 'bet_choice': None, 'secret': None}}
+user_data = {}
 
 def get_user(user_id):@Mmad_mmmj
     if user_id not in user_data:
@@ -47,20 +43,11 @@ async def main_menu(update, context, text=None):
     else:
         await update.message.reply_text(msg, reply_markup=reply_markup)
 
-# ======== دستورات عمومی ========
 async def start(update, context):
     await main_menu(update, context)
 
 async def help_cmd(update, context):
-    text = """
-🎮 **بازی‌ها:**
-- تاس: پرتاب تاس، عدد ۶ → ۱۰۰ سکه پاداش
-- شرط‌بندی: زوج/فرد، ضریب ۲
-- حدس عدد: ۱ تا ۱۰، دقیق ضریب ۵ / اختلاف ۱ ضریب ۲
-
-💰 سکه رو فقط ادمین میده.
-"""
-    await main_menu(update, context, text=text)
+    await main_menu(update, context, text="🎮 بازی‌ها: تاس، شرط‌بندی، حدس عدد")
 
 # ======== بازی تاس ========
 async def dice_game(update, context):
@@ -125,7 +112,7 @@ async def handle_bet(update, context):
         result = f"😢 باختی! {amount} سکه"
 
     emojis = {1:'⚀',2:'⚁',3:'⚂',4:'⚃',5:'⚄',6:'⚅'}
-    await update.message.reply_text(f"🎲 {emojis[num]} عدد {num}\n{result}\n💰 سکه: {get_balance(user_id)}")
+    await update.message.reply_text(f"🎲 {emojis[num]}  عدد {num}\n{result}\n💰 سکه: {get_balance(user_id)}")
     context.user_data['awaiting_bet'] = False
     await main_menu(update, context)
 
@@ -165,7 +152,7 @@ async def handle_guess_number(update, context):
     try:
         guess = int(update.message.text)
         if guess < 1 or guess > 10:
-            await update.message.reply_text("❌ بین ۱ تا ۱۰ باشه!")
+            await update.message.reply_text("❌ عدد بین ۱ تا ۱۰ باشه!")
             return
     except:
         await update.message.reply_text("❌ عدد معتبر وارد کن!")
@@ -202,7 +189,6 @@ async def show_balance(update, context):
     )
     await update.callback_query.answer()
 
-# ======== برگشت به منو ========
 async def back(update, context):
     await main_menu(update, context)
 
@@ -237,9 +223,8 @@ async def unknown(update, context):
 
 # ======== اصلی ========
 def main():
-    TOKEN = "توکن_ربات_خود_را_اینجا_بذار"
     if TOKEN == "توکن_ربات_خود_را_اینجا_بذار":
-        print("⚠️ توکن رو بذار!")
+        print("⚠️ لطفاً توکن ربات را در کد قرار دهید!")
         return
 
     app = Application.builder().token(TOKEN).build()
@@ -262,12 +247,13 @@ def main():
     app.add_handler(CallbackQueryHandler(back, pattern='^back$'))
     app.add_handler(CallbackQueryHandler(unknown))
 
-    # پیام‌های متنی (برای شرط و حدس)
+    # پیام‌های متنی
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bet))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guess))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guess_number))
 
-    print("✅ ربات روشن شد! دستورات ادمین: /addcoin و /setcoin")
+    print("✅ ربات روشن شد!")
+    print("🎮 دستورات ادمین: /addcoin و /setcoin")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":

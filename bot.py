@@ -833,3 +833,7 @@ async def deduct_balance(update, amount):
         f"➖ {amount:,} 🪙\n"
         f"💰 موجودی جدید: {new_balance:,} 🪙"
     )
+try:
+    init_db()
+except Exception as e:
+    print("DB:", e)

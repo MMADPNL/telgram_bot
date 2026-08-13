@@ -1,5 +1,7 @@
-import sys
-import telegram
+print("Python OK ✅")
 
-print("Python:", sys.version)
-print("python-telegram-bot:", telegram.__version__)
+a = 10
+b = 20
+
+print("جمع:", a + b)
+print("پایتون درست کار می‌کند ✅")

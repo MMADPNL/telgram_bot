@@ -1,1 +1,5 @@
-python-telegram-bot==22.5
+import sys
+import telegram
+
+print("Python:", sys.version)
+print("python-telegram-bot:", telegram.__version__)

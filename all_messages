@@ -1,14 +1,171 @@
-if text.startswith("کسر "):
+async def all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    parts = text.split()
-
-    if len(parts) != 2:
+    if not update.message:
         return
 
-    try:
-        amount = int(parts[1])
-    except ValueError:
+    # -------------------------
+    # Dice کاربر
+    # -------------------------
+    if update.message.dice:
+        await user_dice(update)
         return
 
-    await deduct(update, amount)
-    return
+    # -------------------------
+    # پیام متنی
+    # -------------------------
+    if not update.message.text:
+        return
+
+    text = update.message.text.strip()
+
+    # -------------------------
+    # کسر موجودی
+    # فقط صاحب ربات
+    # روی پیام کاربر ریپلای شود
+    # مثال: کسر 500
+    # -------------------------
+    if text.startswith("کسر "):
+
+        if update.effective_user.id != OWNER_ID:
+            await update.message.reply_text(
+                "❌ فقط صاحب ربات می‌تواند موجودی کم کند."
+            )
+            return
+
+        parts = text.split()
+
+        if len(parts) != 2:
+            await update.message.reply_text(
+                "❌ فرمت درست:\n\n"
+                "روی پیام کاربر ریپلای کن و بنویس:\n"
+                "کسر 500"
+            )
+            return
+
+        try:
+            amount = int(parts[1])
+        except ValueError:
+            await update.message.reply_text(
+                "❌ مبلغ باید عدد باشد."
+            )
+            return
+
+        reply = update.message.reply_to_message
+
+        if reply is None:
+            await update.message.reply_text(
+                "❌ باید روی پیام کاربر ریپلای کنی."
+            )
+            return
+
+        target = reply.from_user
+
+        if target is None:
+            await update.message.reply_text(
+                "❌ کاربر پیدا نشد."
+            )
+            return
+
+        if target.is_bot:
+            await update.message.reply_text(
+                "❌ نمی‌توانی موجودی ربات را کم کنی."
+            )
+            return
+
+        if amount <= 0:
+            await update.message.reply_text(
+                "❌ مبلغ باید بیشتر از صفر باشد."
+            )
+            return
+
+        old_balance = get_coins(target.id)
+
+        if old_balance < amount:
+            await update.message.reply_text(
+                f"❌ موجودی کاربر کافی نیست.\n\n"
+                f"👤 {target.first_name}\n"
+                f"💰 موجودی: {old_balance:,} 🪙"
+            )
+            return
+
+        new_balance = old_balance - amount
+
+        set_coins(target.id, new_balance)
+
+        await update.message.reply_text(
+            "✅ موجودی کم شد.\n\n"
+            f"👤 کاربر: {target.first_name}\n"
+            f"➖ کسر: {amount:,} 🪙\n"
+            f"💰 موجودی جدید: {new_balance:,} 🪙"
+        )
+
+        return
+
+    # -------------------------
+    # انتقال موجودی
+    # برای همه کاربران
+    # مثال: انتقال 500
+    # روی پیام گیرنده ریپلای شود
+    # -------------------------
+    if text.startswith("انتقال "):
+
+        parts = text.split()
+
+        if len(parts) != 2:
+            await update.message.reply_text(
+                "❌ مثال:\nانتقال 500"
+            )
+            return
+
+        try:
+            amount = int(parts[1])
+        except ValueError:
+            await update.message.reply_text(
+                "❌ مبلغ باید عدد باشد."
+            )
+            return
+
+        await transfer(update, amount)
+        return
+
+    # -------------------------
+    # شارژ صاحب ربات
+    # مثال: شارژ 10000
+    # -------------------------
+    if text.startswith("شارژ "):
+
+        parts = text.split()
+
+        if len(parts) != 2:
+            await update.message.reply_text(
+                "❌ مثال:\nشارژ 10000"
+            )
+            return
+
+        try:
+            amount = int(parts[1])
+        except ValueError:
+            await update.message.reply_text(
+                "❌ مبلغ باید عدد باشد."
+            )
+            return
+
+        await charge(update, amount)
+        return
+
+    # -------------------------
+    # شروع بازی
+    # -------------------------
+    if (
+        "تاس" in text
+        or "بولینگ" in text
+        or "بستکبال" in text
+        or "بسکتبال" in text
+    ):
+        await start_game(update, text)
+        returnapp.add_handler(
+    MessageHandler(
+        filters.ALL,
+        all_messages
+    )
+)

@@ -47,7 +47,7 @@ async def start(update, context):
     await main_menu(update, context)
 
 async def help_cmd(update, context):
-    await main_menu(update, context, text="🎮 بازی‌ها: تاس، شرط‌بندی، حدس عدد")
+    await main_menu(update, context, text="🎮 بازی‌ها: تاس، شرط‌بندی، حدس عدد\n\n💸 انتقال سکه: /transfer [مبلغ] [آیدی کاربر]\nمثال: /transfer 100 8552447077")
 
 # ======== بازی تاس ========
 async def dice_game(update, context):
@@ -192,6 +192,53 @@ async def show_balance(update, context):
 async def back(update, context):
     await main_menu(update, context)
 
+# ======== انتقال سکه ========
+async def transfer_coin(update, context):
+    user_id = update.effective_user.id
+    
+    # بررسی تعداد آرگومان‌ها
+    if len(context.args) != 2:
+        await update.message.reply_text("❌ دستور: /transfer [مبلغ] [آیدی کاربر]\nمثال: /transfer 100 8552447077")
+        return
+    
+    try:
+        amount = int(context.args[0])
+        target_id = int(context.args[1])
+    except ValueError:
+        await update.message.reply_text("❌ لطفاً مبلغ و آیدی رو به درستی وارد کن!\nمثال: /transfer 100 8552447077")
+        return
+    
+    # بررسی اینکه به خودش نده
+    if target_id == user_id:
+        await update.message.reply_text("❌ نمیتونی به خودت سکه بدی!")
+        return
+    
+    # بررسی وجود کاربر گیرنده
+    if target_id not in user_data:
+        await update.message.reply_text("❌ کاربر مورد نظر وجود نداره! (حداقل یک بار ربات رو شروع کرده باشه)")
+        return
+    
+    # بررسی موجودی فرستنده
+    if amount <= 0:
+        await update.message.reply_text("❌ مبلغ باید بیشتر از صفر باشه!")
+        return
+    
+    if amount > get_balance(user_id):
+        await update.message.reply_text(f"❌ سکه کافی نداری! موجودی: {get_balance(user_id)}")
+        return
+    
+    # انجام انتقال
+    change_balance(user_id, -amount)
+    change_balance(target_id, amount)
+    
+    await update.message.reply_text(f"✅ {amount} سکه به کاربر {target_id} منتقل شد!\n💰 موجودی جدید تو: {get_balance(user_id)}")
+    
+    # اطلاع به گیرنده (اگه ربات بهش پیام بده)
+    try:
+        await context.bot.send_message(chat_id=target_id, text=f"🎁 کاربر {user_id} بهت {amount} سکه هدیه داد!\n💰 موجودی جدیدت: {get_balance(target_id)}")
+    except:
+        pass  # اگه کاربر ربات رو بلاک کرده باشه
+
 # ======== دستورات ادمین (فقط خودت) ========
 async def add_coin(update, context):
     if update.effective_user.id != ADMIN_ID:
@@ -233,6 +280,9 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
 
+    # دستور انتقال
+    app.add_handler(CommandHandler("transfer", transfer_coin))
+
     # دستورات ادمین
     app.add_handler(CommandHandler("addcoin", add_coin))
     app.add_handler(CommandHandler("setcoin", set_coin))
@@ -253,7 +303,10 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guess_number))
 
     print("✅ ربات روشن شد!")
-    print("🎮 دستورات ادمین: /addcoin و /setcoin")
+    print("🎮 دستورات:")
+    print("  /addcoin 500  - اضافه کردن سکه به خودت (فقط ادمین)")
+    print("  /setcoin 50000 - تنظیم موجودی (فقط ادمین)")
+    print("  /transfer 100 8552447077 - انتقال سکه به کاربر دیگر")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":

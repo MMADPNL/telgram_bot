@@ -6,13 +6,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 # ========== توکن و تنظیمات ==========
-TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"
-OWNER_ID = 123456789  # <-- آیدی عددی خودت رو از @userinfobot بگیر
+TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"  # توکن خودت
+OWNER_ID = 123456789  # <-- آیدی عددی خودت رو از @userinfobot بگیر و اینجا بذار
 
 DATA_FILE = "balances.json"
 STATS_FILE = "stats.json"
 
-# ========== توابع دیتا ==========
+# ========== توابع دیتا (موجودی) ==========
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
@@ -36,6 +36,7 @@ def add_balance(user_id, amount):
     current = get_balance(user_id)
     set_balance(user_id, current + amount)
 
+# ========== توابع دیتا (آمار) ==========
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return {}
@@ -90,10 +91,19 @@ async def handle_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text.strip()
     user_id = update.effective_user.id
 
-    # الگوی regex: 1تاس 200
     pattern = r'^1(تاس|بسکتبال|بولینگ|دارت)\s+(\d+)$'
     match = re.match(pattern, text)
+
     if not match:
+        await update.message.reply_text(
+            "❌ **فرمت دستور اشتباه است!**\n\n"
+            "📌 **فرمت صحیح:**\n"
+            "`1تاس 200`\n"
+            "`1بسکتبال 150`\n"
+            "`1بولینگ 100`\n"
+            "`1دارت 300`\n\n"
+            "💰 شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد."
+        )
         return
 
     game_name = match.group(1)
@@ -103,7 +113,6 @@ async def handle_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ مقدار شرط باید عدد باشه!")
         return
 
-    # اعتبارسنجی شرط
     if bet < 50 or bet > 5000:
         await update.message.reply_text("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
         return
@@ -182,9 +191,9 @@ async def handle_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     # ========== بازی دارت ==========
     elif game_name == "دارت":
-        user_throw = random.randint(1, 10)  # پرتاب کاربر
-        bot_throw = random.randint(1, 10)   # پرتاب ربات
-        target = random.randint(1, 10)      # هدف
+        user_throw = random.randint(1, 10)
+        bot_throw = random.randint(1, 10)
+        target = random.randint(1, 10)
 
         user_diff = abs(user_throw - target)
         bot_diff = abs(bot_throw - target)
@@ -343,18 +352,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != OWNER_ID:
-        await update.message.reply_text("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
-        return
-
-    save_stats({})  # <-- اینجا کل فایل آمار رو خالی میکنه
-    await update.message.reply_text("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != OWNER_ID:
-        await update.message.reply_text("❌ فقط مالک ربات می‌تونه آمار رو ریست کنه!")
-        return
-
-    save_stats({})  # <-- اینجا کل فایل آمار رو خالی میکنه
-    await update.message.reply_text("✅ **همه آمار بازی‌ها با موفقیت صفر شد.** از نو شروع می‌کنیم! 🔄")
+    main()

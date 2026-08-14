@@ -16,6 +16,9 @@ OWNER_BALANCE = 50_000_000
 DATA_FILE = "balances.json"
 STATS_FILE = "stats.json"
 
+# ایموجی‌های تاس
+DICE_EMOJIS = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
+
 def load_data():
     if not os.path.exists(DATA_FILE): return {}
     with open(DATA_FILE, "r") as f: return json.load(f)
@@ -83,22 +86,39 @@ async def handle_game(update, context):
     try:
         text = update.message.text.strip()
         uid = update.effective_user.id
-        match = re.match(r'^1(تاس|بسکتبال|بولینگ|دارت)\s+(\d+)$', text)
+        
+        pattern = r'^1(تاس|بسکتبال|بولینگ|دارت)\s*(\d+)$'
+        match = re.match(pattern, text)
+        
         if not match:
-            await update.message.reply_text("❌ مثال: `1تاس 200`")
+            await update.message.reply_text(
+                "❌ **فرمت اشتباه!**\n\n"
+                "📌 **فرمت صحیح:**\n"
+                "`1تاس 200` یا `1تاس200`\n"
+                "`1بسکتبال 150` یا `1بسکتبال150`\n"
+                "`1بولینگ 100` یا `1بولینگ100`\n"
+                "`1دارت 300` یا `1دارت300`"
+            )
             return
-        game, bet = match.group(1), int(match.group(2))
+            
+        game_name = match.group(1)
+        bet = int(match.group(2))
+        
         if bet < 50 or bet > 5000:
-            await update.message.reply_text("❌ شرط باید ۵۰ تا ۵۰۰۰ باشد")
+            await update.message.reply_text("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
             return
+            
         if get_balance(uid) < bet:
             await update.message.reply_text(f"❌ موجودی کافی نیست! (موجودی: {get_balance(uid)})")
             return
 
         # ==================== بازی تاس ====================
-        if game == "تاس":
-            user_roll = random.randint(1, 6)  # اول کاربر می‌ندازه
-            bot_roll = random.randint(1, 6)   # بعد ربات می‌ندازه
+        if game_name == "تاس":
+            user_roll = random.randint(1, 6)  # اول کاربر
+            bot_roll = random.randint(1, 6)   # بعد ربات
+            
+            user_emoji = DICE_EMOJIS[user_roll - 1]
+            bot_emoji = DICE_EMOJIS[bot_roll - 1]
             
             if user_roll > bot_roll:
                 add_balance(uid, bet*2)
@@ -114,14 +134,14 @@ async def handle_game(update, context):
             
             await update.message.reply_text(
                 f"🎲 **بازی تاس**\n\n"
-                f"🎲 **پرتاب تو:** {user_roll}\n"
-                f"🎲 **پرتاب ربات:** {bot_roll}\n"
+                f"🎲 **پرتاب تو:** {user_emoji}  ({user_roll})\n"
+                f"🎲 **پرتاب ربات:** {bot_emoji}  ({bot_roll})\n"
                 f"💰 شرط: {bet} سکه\n"
                 f"📌 {result}"
             )
 
         # ==================== بازی بسکتبال ====================
-        elif game == "بسکتبال":
+        elif game_name == "بسکتبال":
             user_score = random.choice(["🏀 گل کردی! ✅", "🏀 گل نشد! ❌"])  # اول کاربر
             bot_score = random.choice(["🏀 گل کردی! ✅", "🏀 گل نشد! ❌"])   # بعد ربات
             
@@ -146,7 +166,7 @@ async def handle_game(update, context):
             )
 
         # ==================== بازی بولینگ ====================
-        elif game == "بولینگ":
+        elif game_name == "بولینگ":
             user_pins = random.randint(0, 10)  # اول کاربر
             bot_pins = random.randint(0, 10)   # بعد ربات
             
@@ -172,7 +192,7 @@ async def handle_game(update, context):
             )
 
         # ==================== بازی دارت ====================
-        elif game == "دارت":
+        elif game_name == "دارت":
             target = random.randint(1, 10)          # هدف مشترک
             user_throw = random.randint(1, 10)      # اول کاربر
             bot_throw = random.randint(1, 10)       # بعد ربات
@@ -195,7 +215,7 @@ async def handle_game(update, context):
             
             await update.message.reply_text(
                 f"🎯 **بازی دارت**\n\n"
-                f"🎯 هدف: {target}\n"
+                f"🎯 **هدف:** {target}\n"
                 f"🎯 **پرتاب تو:** {user_throw} (فاصله: {user_diff})\n"
                 f"🎯 **پرتاب ربات:** {bot_throw} (فاصله: {bot_diff})\n"
                 f"💰 شرط: {bet} سکه\n"
@@ -262,7 +282,7 @@ async def button(update, context):
         cmd = q.data
         if cmd in ["dice","basketball","bowling","dart"]:
             names = {"dice":"تاس", "basketball":"بسکتبال", "bowling":"بولینگ", "dart":"دارت"}
-            await q.message.reply_text(f"🎮 مثال: `1{names[cmd]} 200`")
+            await q.message.reply_text(f"🎮 مثال: `1{names[cmd]} 200` یا `1{names[cmd]}200`")
         elif cmd == "balance":
             await q.message.reply_text(f"💰 موجودی: {get_balance(q.from_user.id):,} سکه")
         elif cmd == "stats":
@@ -286,4 +306,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main() 

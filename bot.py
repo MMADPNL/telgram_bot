@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"
-OWNER_ID = 123456789
+OWNER_ID = 8552447077
 OWNER_BALANCE = 50_000_000
 
 DATA_FILE = "balances.json"
@@ -20,9 +20,13 @@ def save_data(d):
 def get_balance(uid):
     data = load_data()
     uid = str(uid)
-    if int(uid) == OWNER_ID and uid not in data:
-        data[uid] = OWNER_BALANCE
-        save_data(data)
+
+    if int(uid) == OWNER_ID:
+        if data.get(uid) != OWNER_BALANCE:
+            data[uid] = OWNER_BALANCE
+            save_data(data)
+        return OWNER_BALANCE
+
     return data.get(uid, 0)
 def set_balance(uid, amt):
     data = load_data()

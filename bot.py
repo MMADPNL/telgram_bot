@@ -176,7 +176,22 @@ async def button(update, context):
         await q.message.reply_text(f"📊 برد: {s['wins']}\nباخت: {s['losses']}\nمساوی: {s['draws']}")
 
 def main():
+    def myid(update, context):
+    return update.message.reply_text(
+        f"ID شما: {update.effective_user.id}"
+    )
+
+
+def main():
+    def myid(update, context):
+    return update.message.reply_text(
+        f"ID شما: {update.effective_user.id}"
+    )
+
+
+def main():
     app = Application.builder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("stats", stats))
@@ -184,10 +199,14 @@ def main():
     app.add_handler(CommandHandler("reset", reset))
     app.add_handler(CommandHandler("resetstats", resetstats))
     app.add_handler(CommandHandler("resetall", resetall))
+    app.add_handler(CommandHandler("myid", myid))
+
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game))
+
     print("🤖 ربات روشن شد...")
     app.run_polling()
 
+
 if __name__ == "__main__":
-    main()app.add_handler(CommandHandler("myid", myid))
+    main()

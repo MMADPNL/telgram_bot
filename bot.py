@@ -176,12 +176,10 @@ async def button(update, context):
         await q.message.reply_text(f"📊 برد: {s['wins']}\nباخت: {s['losses']}\nمساوی: {s['draws']}")
 
 def main():
-    def myid(update, context):
-    return update.message.reply_text(
+async def myid(update, context):
+    await update.message.reply_text(
         f"ID شما: {update.effective_user.id}"
     )
-
-
 def main():
     def myid(update, context):
     return update.message.reply_text(

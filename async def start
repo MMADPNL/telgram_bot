@@ -1,0 +1,2 @@
+async def myid(update, context):
+    await update.message.reply_text(f"ID شما: {update.effective_user.id}")

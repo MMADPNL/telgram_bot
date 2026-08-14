@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"
 OWNER_ID = 123456789
-set_balance(OWNER_ID, OWNER_BALANCE)= 50_000_000
+OWNER_BALANCE = 50_000_000
 
 DATA_FILE = "balances.json"
 STATS_FILE = "stats.json"

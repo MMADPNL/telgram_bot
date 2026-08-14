@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"
-OWNER_ID = 123456789  # <-- آیدی خودت رو بذار
+OWNER_ID = 123456789
 OWNER_BALANCE = 50000000
 
 DATA_FILE = "balances.json"

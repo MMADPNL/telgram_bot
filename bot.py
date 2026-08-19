@@ -19,8 +19,7 @@ from telegram.ext import (
 # تنظیمات
 # =========================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
+BOT_TOKEN = 8790498730:AAFJ1WAmwMSSBFsgrnoxCJQFfm59Wo6I214
 
 OWNER_ID = 8552447077
 
@@ -31,7 +30,7 @@ DATA_FILE = "users.json"
 
 
 # =========================
-# دیتابیس ساده JSON
+# دیتابیس JSON
 # =========================
 
 def load_data():
@@ -44,6 +43,7 @@ def load_data():
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
+
     except Exception:
         return {
             "owner_id": OWNER_ID,
@@ -53,7 +53,12 @@ def load_data():
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
 
 
 data = load_data()
@@ -73,6 +78,7 @@ def get_user(user_id):
             "combo_claimed": False,
             "free_claimed": False,
         }
+
         save_data(data)
 
     return data["users"][uid]
@@ -87,6 +93,7 @@ def is_owner(user_id):
 # =========================
 
 def main_menu():
+
     keyboard = [
         [
             InlineKeyboardButton(
@@ -112,7 +119,7 @@ def main_menu():
 
 
 # =========================
-# /start
+# START
 # =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,16 +133,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
 
         try:
+
             inviter_id = int(context.args[0])
 
             if inviter_id != user_id:
 
                 inviter = get_user(inviter_id)
 
-                # فقط اگر این کاربر قبلاً دعوت نشده باشد
                 if str(user_id) not in inviter["invited_users"]:
 
-                    inviter["invited_users"].append(str(user_id))
+                    inviter["invited_users"].append(
+                        str(user_id)
+                    )
+
                     inviter["invited"] += 1
 
                     save_data(data)
@@ -162,6 +172,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     await query.answer()
 
     bot = await context.bot.get_me()
@@ -179,16 +190,18 @@ async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "این لینک را برای دوستانت ارسال کن."
     )
 
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🔙 بازگشت",
+                callback_data="back"
+            )
+        ]
+    ]
+
     await query.message.edit_text(
         text,
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    "🔙 بازگشت",
-                    callback_data="back"
-                )
-            ]
-        ])
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -199,20 +212,27 @@ async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     await query.answer()
 
     user_id = query.from_user.id
+
     user = get_user(user_id)
 
     needed = 2
+
     invited = user["invited"]
 
+    # قبلاً برداشت شده
     if user["free_claimed"]:
+
         await query.message.edit_text(
             "❌ شما قبلاً اک رایگان خود را برداشت کرده‌اید."
         )
+
         return
 
+    # شرایط برداشت
     if invited >= needed:
 
         keyboard = [
@@ -241,6 +261,7 @@ async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         remaining = needed - invited
 
         bot = await context.bot.get_me()
+
         link = f"https://t.me/{bot.username}?start={user_id}"
 
         text = (
@@ -248,7 +269,7 @@ async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👥 تعداد لازم: {needed} نفر\n"
             f"👤 دعوت شده: {invited} نفر\n"
             f"⏳ باقی‌مانده: {remaining} نفر\n\n"
-            "لینک دعوت شما:\n"
+            "🔗 لینک دعوت شما:\n"
             f"{link}\n\n"
             "دو نفر را با لینک بالا وارد ربات کنید."
         )
@@ -275,26 +296,33 @@ async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# کمبو
+# کمبو 100 درصد
 # =========================
 
 async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     await query.answer()
 
     user_id = query.from_user.id
+
     user = get_user(user_id)
 
     needed = 1
+
     invited = user["invited"]
 
+    # قبلاً برداشت شده
     if user["combo_claimed"]:
+
         await query.message.edit_text(
             "❌ شما قبلاً کمبو 100درصد خود را برداشت کرده‌اید."
         )
+
         return
 
+    # شرایط برداشت
     if invited >= needed:
 
         keyboard = [
@@ -321,6 +349,7 @@ async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
 
         bot = await context.bot.get_me()
+
         link = f"https://t.me/{bot.username}?start={user_id}"
 
         text = (
@@ -359,24 +388,31 @@ async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     await query.answer()
 
     user_id = query.from_user.id
+
     user = get_user(user_id)
 
     if user["invited"] < 2:
+
         await query.message.edit_text(
             "❌ شما هنوز شرایط برداشت را ندارید."
         )
+
         return
 
     if user["free_claimed"]:
+
         await query.message.edit_text(
             "❌ درخواست شما قبلاً ثبت شده است."
         )
+
         return
 
     user["free_claimed"] = True
+
     save_data(data)
 
     user_info = query.from_user
@@ -385,17 +421,21 @@ async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎁 درخواست اک رایگان\n\n"
         f"👤 نام: {user_info.full_name}\n"
         f"🆔 آیدی عددی: {user_id}\n"
-        f"🔗 یوزرنیم: @{user_info.username if user_info.username else 'ندارد'}\n"
+        f"🔗 یوزرنیم: "
+        f"@{user_info.username if user_info.username else 'ندارد'}\n"
         f"👥 دعوت‌ها: {user['invited']}\n\n"
         "نوع درخواست: اک رایگان"
     )
 
     try:
+
         await context.bot.send_message(
             chat_id=CHANNEL_USERNAME,
             text=message
         )
+
     except Exception as e:
+
         print("CHANNEL ERROR:", e)
 
     await query.message.edit_text(
@@ -411,24 +451,31 @@ async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     await query.answer()
 
     user_id = query.from_user.id
+
     user = get_user(user_id)
 
     if user["invited"] < 1:
+
         await query.message.edit_text(
             "❌ شما هنوز شرایط برداشت را ندارید."
         )
+
         return
 
     if user["combo_claimed"]:
+
         await query.message.edit_text(
             "❌ درخواست شما قبلاً ثبت شده است."
         )
+
         return
 
     user["combo_claimed"] = True
+
     save_data(data)
 
     user_info = query.from_user
@@ -437,21 +484,25 @@ async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💯 درخواست کمبو 100درصد\n\n"
         f"👤 نام: {user_info.full_name}\n"
         f"🆔 آیدی عددی: {user_id}\n"
-        f"🔗 یوزرنیم: @{user_info.username if user_info.username else 'ندارد'}\n"
+        f"🔗 یوزرنیم: "
+        f"@{user_info.username if user_info.username else 'ندارد'}\n"
         f"👥 دعوت‌ها: {user['invited']}\n\n"
         "نوع درخواست: کمبو 100درصد"
     )
 
     try:
+
         await context.bot.send_message(
             chat_id=CHANNEL_USERNAME,
             text=message
         )
+
     except Exception as e:
+
         print("CHANNEL ERROR:", e)
 
     await query.message.edit_text(
-        "برداشت شما به کانال زیر ارسال شد✅️\n\n"
+        "برداشت شما به کانال زیر ارسال شد ✅️\n\n"
         f"{CHANNEL_LINK}"
     )
 
@@ -465,9 +516,11 @@ async def transfer_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not is_owner(user_id):
+
         await update.message.reply_text(
             "❌ این دستور فقط برای مالک ربات است."
         )
+
         return
 
     context.user_data["waiting_for_new_owner"] = True
@@ -484,28 +537,39 @@ async def transfer_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def receive_owner_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if not context.user_data.get("waiting_for_new_owner"):
+    if not context.user_data.get(
+        "waiting_for_new_owner"
+    ):
         return
 
-    if not is_owner(update.effective_user.id):
+    if not is_owner(
+        update.effective_user.id
+    ):
         return
 
     text = update.message.text.strip()
 
     try:
+
         new_owner_id = int(text)
+
     except ValueError:
+
         await update.message.reply_text(
-            "❌ آیدی عددی صحیح نیست.\n"
+            "❌ آیدی عددی صحیح نیست.\n\n"
             "مثال:\n"
             "123456789"
         )
+
         return
 
     data["owner_id"] = new_owner_id
+
     save_data(data)
 
-    context.user_data["waiting_for_new_owner"] = False
+    context.user_data[
+        "waiting_for_new_owner"
+    ] = False
 
     await update.message.reply_text(
         "✅ انتقال مالکیت با موفقیت انجام شد.\n\n"
@@ -521,6 +585,7 @@ async def receive_owner_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
+
     await query.answer()
 
     await query.message.edit_text(
@@ -539,30 +604,61 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
 
     if query.data == "free_account":
-        await free_account(update, context)
+
+        await free_account(
+            update,
+            context
+        )
 
     elif query.data == "combo":
-        await combo(update, context)
+
+        await combo(
+            update,
+            context
+        )
 
     elif query.data == "my_link":
-        await my_link(update, context)
+
+        await my_link(
+            update,
+            context
+        )
 
     elif query.data == "claim_free":
-        await claim_free(update, context)
+
+        await claim_free(
+            update,
+            context
+        )
 
     elif query.data == "claim_combo":
-        await claim_combo(update, context)
+
+        await claim_combo(
+            update,
+            context
+        )
 
     elif query.data == "back":
-        await back(update, context)
+
+        await back(
+            update,
+            context
+        )
 
 
 # =========================
 # خطاها
 # =========================
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    print("ERROR:", context.error)
+async def error_handler(
+    update: object,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    print(
+        "ERROR:",
+        context.error
+    )
 
 
 # =========================
@@ -572,17 +668,36 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 def main():
 
     if not BOT_TOKEN:
+
         raise ValueError(
-            "BOT_TOKEN در Environment Variables تنظیم نشده است."
+            "BOT_TOKEN تنظیم نشده است."
         )
 
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("transferowner", transfer_owner))
+    app = (
+        Application
+        .builder()
+        .token(BOT_TOKEN)
+        .build()
+    )
 
     app.add_handler(
-        CallbackQueryHandler(button_handler)
+        CommandHandler(
+            "start",
+            start
+        )
+    )
+
+    app.add_handler(
+        CommandHandler(
+            "transferowner",
+            transfer_owner
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            button_handler
+        )
     )
 
     app.add_handler(
@@ -592,12 +707,17 @@ def main():
         )
     )
 
-    app.add_error_handler(error_handler)
+    app.add_error_handler(
+        error_handler
+    )
 
-    print("Bot is running...")
+    print(
+        "Bot is running..."
+    )
 
     app.run_polling()
 
 
 if __name__ == "__main__":
+
     main()

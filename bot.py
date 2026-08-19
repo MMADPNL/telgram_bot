@@ -36,7 +36,7 @@ BALANCE_FILE = "balances.json"
 OWNER_FILE = "owner.json"
 
 # موجودی اولیه کاربران جدید
-START_BALANCE = 100000
+START_BALANCE = 0
 
 # حداقل شرط
 MIN_BET = 100

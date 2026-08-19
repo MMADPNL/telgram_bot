@@ -9,143 +9,82 @@ from telegram import (
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
-    filters,
 )
+from telegram.error import TelegramError
 
-# =========================
+
+# ==================================================
 # تنظیمات
-# =========================
+# ==================================================
 
 BOT_TOKEN = "8790498730:AAFJ1WAmwMSSBFsgrnoxCJQFfm59Wo6I214"
 
 
 OWNER_ID = 8552447077
 
+# کانال اجباری
 CHANNEL_USERNAME = "@prmiumfarsi"
 CHANNEL_LINK = "https://t.me/prmiumfarsi"
 
-DATA_FILE = "users.json"
 
+# ==================================================
+# اطلاعات کاربران
+# بدون ساخت users.json
+# ==================================================
 
-# =========================
-# دیتابیس JSON
-# =========================
+users = {}
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {
-            "owner_id": OWNER_ID,
-            "users": {}
-        }
+owner_id = OWNER_ID
 
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if "owner_id" not in data:
-            data["owner_id"] = OWNER_ID
-
-        if "users" not in data:
-            data["users"] = {}
-
-        return data
-
-    except Exception:
-        return {
-            "owner_id": OWNER_ID,
-            "users": {}
-        }
-
-
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            data,
-            f,
-            ensure_ascii=False,
-            indent=2
-        )
-
-
-data = load_data()
-
-
-# =========================
-# کاربر
-# =========================
 
 def get_user(user_id):
-    uid = str(user_id)
+    user_id = str(user_id)
 
-    if uid not in data["users"]:
-        data["users"][uid] = {
+    if user_id not in users:
+        users[user_id] = {
             "invited": 0,
             "invited_users": [],
-            "combo_claimed": False,
             "free_claimed": False,
-            "joined_channel": False,
+            "combo_claimed": False,
         }
-        save_data(data)
 
-    else:
-        # برای کاربران قدیمی
-        user = data["users"][uid]
-
-        if "invited" not in user:
-            user["invited"] = 0
-
-        if "invited_users" not in user:
-            user["invited_users"] = []
-
-        if "combo_claimed" not in user:
-            user["combo_claimed"] = False
-
-        if "free_claimed" not in user:
-            user["free_claimed"] = False
-
-        if "joined_channel" not in user:
-            user["joined_channel"] = False
-
-        save_data(data)
-
-    return data["users"][uid]
+    return users[user_id]
 
 
 def is_owner(user_id):
-    return int(user_id) == int(data["owner_id"])
+    return int(user_id) == int(owner_id)
 
 
-# =========================
+# ==================================================
 # بررسی عضویت کانال
-# =========================
+# ==================================================
 
-async def is_channel_member(user_id, context):
+async def is_member(bot, user_id):
 
     try:
-        member = await context.bot.get_chat_member(
+        member = await bot.get_chat_member(
             chat_id=CHANNEL_USERNAME,
             user_id=user_id
         )
 
-        return member.status in (
+        return member.status in [
             "member",
             "administrator",
             "creator"
-        )
+        ]
 
-    except Exception as e:
-        print("CHANNEL CHECK ERROR:", e)
+    except TelegramError as e:
+        print("Membership error:", e)
         return False
 
 
-# =========================
-# صفحه عضویت اجباری
-# =========================
+# ==================================================
+# دکمه عضویت کانال
+# ==================================================
 
-def join_channel_menu():
+def join_channel_keyboard():
 
     keyboard = [
         [
@@ -157,38 +96,17 @@ def join_channel_menu():
         [
             InlineKeyboardButton(
                 "✅ بررسی عضویت",
-                callback_data="check_membership"
+                callback_data="check_join"
             )
-        ],
+        ]
     ]
 
     return InlineKeyboardMarkup(keyboard)
 
 
-async def require_channel(update, context):
-
-    text = (
-        "🔒 برای استفاده از ربات ابتدا باید عضو کانال ما شوید.\n\n"
-        "1️⃣ روی «📢 عضویت در کانال» بزنید.\n"
-        "2️⃣ عضو کانال شوید.\n"
-        "3️⃣ سپس روی «✅ بررسی عضویت» بزنید."
-    )
-
-    if update.callback_query:
-        await update.callback_query.message.edit_text(
-            text,
-            reply_markup=join_channel_menu()
-        )
-    elif update.message:
-        await update.message.reply_text(
-            text,
-            reply_markup=join_channel_menu()
-        )
-
-
-# =========================
+# ==================================================
 # منوی اصلی
-# =========================
+# ==================================================
 
 def main_menu():
 
@@ -210,15 +128,15 @@ def main_menu():
                 "👥 لینک دعوت من",
                 callback_data="my_link"
             )
-        ],
+        ]
     ]
 
     return InlineKeyboardMarkup(keyboard)
 
 
-# =========================
+# ==================================================
 # START
-# =========================
+# ==================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -227,26 +145,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     get_user(user_id)
 
-    # بررسی عضویت
-    member = await is_channel_member(
-        user_id,
-        context
-    )
-
-    if not member:
-        await require_channel(
-            update,
-            context
-        )
-        return
-
-    # ثبت عضویت
-    get_user(user_id)["joined_channel"] = True
-    save_data(data)
-
-    # =========================
+    # ----------------------------------------------
     # بررسی لینک دعوت
-    # =========================
+    # ----------------------------------------------
 
     if context.args:
 
@@ -254,11 +155,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             inviter_id = int(context.args[0])
 
+            # خودش خودش را دعوت نکند
             if inviter_id != user_id:
 
                 inviter = get_user(inviter_id)
 
-                # فقط دعوت کاربر جدید حساب شود
+                # دعوت فقط یک بار حساب شود
                 if str(user_id) not in inviter["invited_users"]:
 
                     inviter["invited_users"].append(
@@ -267,28 +169,50 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     inviter["invited"] += 1
 
-                    save_data(data)
+                    print(
+                        f"INVITE: {inviter_id} invited {user_id}"
+                    )
 
         except (ValueError, TypeError):
+
             pass
 
-    text = (
-        f"سلام {user.first_name} 👋\n\n"
-        "به ربات خوش آمدید ❤️\n\n"
-        "از منوی زیر گزینه مورد نظر خودت رو انتخاب کن:"
+    # ----------------------------------------------
+    # عضویت کانال
+    # ----------------------------------------------
+
+    member = await is_member(
+        context.bot,
+        user_id
     )
 
+    if not member:
+
+        await update.message.reply_text(
+            "🔒 برای استفاده از ربات ابتدا باید عضو کانال شوید.\n\n"
+            "بعد از عضویت روی «بررسی عضویت» بزنید.",
+            reply_markup=join_channel_keyboard()
+        )
+
+        return
+
+    # ----------------------------------------------
+    # ورود به ربات
+    # ----------------------------------------------
+
     await update.message.reply_text(
-        text,
+        f"سلام {user.first_name} 👋\n\n"
+        "به ربات خوش آمدید ❤️\n\n"
+        "از منوی زیر گزینه مورد نظر خودت رو انتخاب کن:",
         reply_markup=main_menu()
     )
 
 
-# =========================
-# بررسی عضویت
-# =========================
+# ==================================================
+# بررسی عضویت با دکمه
+# ==================================================
 
-async def check_membership(update, context):
+async def check_join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
@@ -296,38 +220,30 @@ async def check_membership(update, context):
 
     user_id = query.from_user.id
 
-    member = await is_channel_member(
-        user_id,
-        context
+    member = await is_member(
+        context.bot,
+        user_id
     )
 
     if not member:
 
-        await query.message.edit_text(
-            "❌ هنوز عضو کانال نیستید.\n\n"
-            "ابتدا عضو کانال شوید و سپس دوباره "
-            "روی «✅ بررسی عضویت» بزنید.",
-            reply_markup=join_channel_menu()
+        await query.answer(
+            "❌ هنوز عضو کانال نشده‌اید.",
+            show_alert=True
         )
 
         return
 
-    user = get_user(user_id)
-
-    user["joined_channel"] = True
-
-    save_data(data)
-
     await query.message.edit_text(
         "✅ عضویت شما تأیید شد.\n\n"
-        "🎉 حالا می‌توانید از ربات استفاده کنید.",
+        "حالا می‌توانید از ربات استفاده کنید.",
         reply_markup=main_menu()
     )
 
 
-# =========================
+# ==================================================
 # لینک دعوت
-# =========================
+# ==================================================
 
 async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -337,33 +253,20 @@ async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
-    # بررسی عضویت
-    if not await is_channel_member(
-        user_id,
-        context
-    ):
-
-        await require_channel(
-            update,
-            context
-        )
-
-        return
+    user = get_user(user_id)
 
     bot = await context.bot.get_me()
 
     link = (
-        f"https://t.me/{bot.username}?start={user_id}"
+        f"https://t.me/{bot.username}"
+        f"?start={user_id}"
     )
 
-    user = get_user(user_id)
-
     text = (
-        "🔗 لینک دعوت اختصاصی شما:\n\n"
+        "🔗 لینک دعوت اختصاصی شما\n\n"
         f"{link}\n\n"
-        f"👥 تعداد دعوت‌های شما: "
-        f"{user['invited']}\n\n"
-        "این لینک را برای دوستانت ارسال کن."
+        f"👥 تعداد دعوت‌ها: {user['invited']}\n\n"
+        "لینک را برای دوستانت بفرست."
     )
 
     keyboard = [
@@ -381,9 +284,9 @@ async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
+# ==================================================
 # اک رایگان
-# =========================
+# ==================================================
 
 async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -393,14 +296,12 @@ async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
-    if not await is_channel_member(
-        user_id,
-        context
-    ):
+    # بررسی عضویت
+    if not await is_member(context.bot, user_id):
 
-        await require_channel(
-            update,
-            context
+        await query.message.edit_text(
+            "🔒 ابتدا باید عضو کانال شوید.",
+            reply_markup=join_channel_keyboard()
         )
 
         return
@@ -408,17 +309,17 @@ async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(user_id)
 
     needed = 2
-    invited = user["invited"]
 
     if user["free_claimed"]:
 
         await query.message.edit_text(
-            "❌ شما قبلاً اک رایگان خود را برداشت کرده‌اید."
+            "❌ شما قبلاً اک رایگان خود را برداشت کرده‌اید.",
+            reply_markup=main_menu()
         )
 
         return
 
-    if invited >= needed:
+    if user["invited"] >= needed:
 
         keyboard = [
             [
@@ -437,123 +338,26 @@ async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = (
             "🎁 اک رایگان\n\n"
-            "تبریک! شما شرایط دریافت اک رایگان را دارید. ✅\n\n"
-            "برای ارسال درخواست روی دکمه برداشت بزنید."
+            "تبریک! شرایط دریافت اک رایگان را دارید. ✅\n\n"
+            "برای ارسال درخواست روی برداشت بزنید."
         )
 
     else:
 
-        remaining = needed - invited
-
         bot = await context.bot.get_me()
 
         link = (
-            f"https://t.me/{bot.username}?start={user_id}"
+            f"https://t.me/{bot.username}"
+            f"?start={user_id}"
         )
+
+        remaining = needed - user["invited"]
 
         text = (
             "🎁 اک رایگان\n\n"
             f"👥 تعداد لازم: {needed} نفر\n"
-            f"👤 دعوت شده: {invited} نفر\n"
+            f"👤 دعوت شده: {user['invited']} نفر\n"
             f"⏳ باقی‌مانده: {remaining} نفر\n\n"
-            "🔗 لینک دعوت شما:\n"
-            f"{link}\n\n"
-            "دو نفر را با لینک بالا وارد ربات کنید."
-        )
-
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "👥 لینک دعوت من",
-                    callback_data="my_link"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔙 بازگشت",
-                    callback_data="back"
-                )
-            ]
-        ]
-
-    await query.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-# =========================
-# کمبو
-# =========================
-
-async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    if not await is_channel_member(
-        user_id,
-        context
-    ):
-
-        await require_channel(
-            update,
-            context
-        )
-
-        return
-
-    user = get_user(user_id)
-
-    needed = 1
-    invited = user["invited"]
-
-    if user["combo_claimed"]:
-
-        await query.message.edit_text(
-            "❌ شما قبلاً کمبو 100درصد خود را برداشت کرده‌اید."
-        )
-
-        return
-
-    if invited >= needed:
-
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "✅ برداشت",
-                    callback_data="claim_combo"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔙 بازگشت",
-                    callback_data="back"
-                )
-            ]
-        ]
-
-        text = (
-            "💯 کمبو 100درصد\n\n"
-            "تبریک! شما شرایط دریافت کمبو را دارید. ✅\n\n"
-            "برای ارسال درخواست روی دکمه برداشت بزنید."
-        )
-
-    else:
-
-        bot = await context.bot.get_me()
-
-        link = (
-            f"https://t.me/{bot.username}?start={user_id}"
-        )
-
-        text = (
-            "💯 کمبو 100درصد\n\n"
-            "👥 برای دریافت کمبو باید 1 نفر را دعوت کنید.\n\n"
-            f"👤 دعوت شده: {invited}/1\n\n"
             "🔗 لینک دعوت شما:\n"
             f"{link}"
         )
@@ -579,9 +383,104 @@ async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
-# برداشت اک رایگان
-# =========================
+# ==================================================
+# کمبو
+# ==================================================
+
+async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+
+    await query.answer()
+
+    user_id = query.from_user.id
+
+    if not await is_member(context.bot, user_id):
+
+        await query.message.edit_text(
+            "🔒 ابتدا باید عضو کانال شوید.",
+            reply_markup=join_channel_keyboard()
+        )
+
+        return
+
+    user = get_user(user_id)
+
+    needed = 1
+
+    if user["combo_claimed"]:
+
+        await query.message.edit_text(
+            "❌ شما قبلاً کمبو 100درصد را برداشت کرده‌اید.",
+            reply_markup=main_menu()
+        )
+
+        return
+
+    if user["invited"] >= needed:
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "✅ برداشت",
+                    callback_data="claim_combo"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ]
+
+        text = (
+            "💯 کمبو 100درصد\n\n"
+            "تبریک! شرایط دریافت کمبو را دارید. ✅\n\n"
+            "برای ارسال درخواست روی برداشت بزنید."
+        )
+
+    else:
+
+        bot = await context.bot.get_me()
+
+        link = (
+            f"https://t.me/{bot.username}"
+            f"?start={user_id}"
+        )
+
+        text = (
+            "💯 کمبو 100درصد\n\n"
+            "👥 برای دریافت کمبو باید 1 نفر را دعوت کنید.\n\n"
+            f"👤 دعوت شده: {user['invited']}/1\n\n"
+            "🔗 لینک دعوت شما:\n"
+            f"{link}"
+        )
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "👥 لینک دعوت من",
+                    callback_data="my_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ]
+
+    await query.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# ==================================================
+# برداشت اک
+# ==================================================
 
 async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -591,24 +490,13 @@ async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
-    if not await is_channel_member(
-        user_id,
-        context
-    ):
-
-        await require_channel(
-            update,
-            context
-        )
-
-        return
-
     user = get_user(user_id)
 
     if user["invited"] < 2:
 
         await query.message.edit_text(
-            "❌ شما هنوز شرایط برداشت را ندارید."
+            "❌ شما هنوز ۲ نفر دعوت نکرده‌اید.",
+            reply_markup=main_menu()
         )
 
         return
@@ -616,23 +504,22 @@ async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user["free_claimed"]:
 
         await query.message.edit_text(
-            "❌ درخواست شما قبلاً ثبت شده است."
+            "❌ درخواست شما قبلاً ثبت شده است.",
+            reply_markup=main_menu()
         )
 
         return
 
     user["free_claimed"] = True
 
-    save_data(data)
-
-    user_info = query.from_user
+    info = query.from_user
 
     message = (
         "🎁 درخواست اک رایگان\n\n"
-        f"👤 نام: {user_info.full_name}\n"
+        f"👤 نام: {info.full_name}\n"
         f"🆔 آیدی عددی: {user_id}\n"
         f"🔗 یوزرنیم: "
-        f"@{user_info.username if user_info.username else 'ندارد'}\n"
+        f"@{info.username if info.username else 'ندارد'}\n"
         f"👥 دعوت‌ها: {user['invited']}\n\n"
         "نوع درخواست: اک رایگان"
     )
@@ -654,9 +541,9 @@ async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
+# ==================================================
 # برداشت کمبو
-# =========================
+# ==================================================
 
 async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -666,24 +553,13 @@ async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
-    if not await is_channel_member(
-        user_id,
-        context
-    ):
-
-        await require_channel(
-            update,
-            context
-        )
-
-        return
-
     user = get_user(user_id)
 
     if user["invited"] < 1:
 
         await query.message.edit_text(
-            "❌ شما هنوز شرایط برداشت را ندارید."
+            "❌ شما هنوز ۱ نفر دعوت نکرده‌اید.",
+            reply_markup=main_menu()
         )
 
         return
@@ -691,23 +567,22 @@ async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user["combo_claimed"]:
 
         await query.message.edit_text(
-            "❌ درخواست شما قبلاً ثبت شده است."
+            "❌ درخواست شما قبلاً ثبت شده است.",
+            reply_markup=main_menu()
         )
 
         return
 
     user["combo_claimed"] = True
 
-    save_data(data)
-
-    user_info = query.from_user
+    info = query.from_user
 
     message = (
         "💯 درخواست کمبو 100درصد\n\n"
-        f"👤 نام: {user_info.full_name}\n"
+        f"👤 نام: {info.full_name}\n"
         f"🆔 آیدی عددی: {user_id}\n"
         f"🔗 یوزرنیم: "
-        f"@{user_info.username if user_info.username else 'ندارد'}\n"
+        f"@{info.username if info.username else 'ندارد'}\n"
         f"👥 دعوت‌ها: {user['invited']}\n\n"
         "نوع درخواست: کمبو 100درصد"
     )
@@ -729,11 +604,13 @@ async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================
+# ==================================================
 # انتقال مالکیت
-# =========================
+# ==================================================
 
 async def transfer_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    global owner_id
 
     user_id = update.effective_user.id
 
@@ -745,66 +622,57 @@ async def transfer_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    context.user_data[
-        "waiting_for_new_owner"
-    ] = True
+    context.user_data["waiting_owner"] = True
 
     await update.message.reply_text(
         "👑 انتقال مالکیت\n\n"
-        "آیدی عددی مالک جدید را ارسال کنید:"
+        "آیدی عددی مالک جدید را ارسال کن:"
     )
 
 
-# =========================
+# ==================================================
 # دریافت آیدی مالک جدید
-# =========================
+# ==================================================
 
 async def receive_owner_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if not context.user_data.get(
-        "waiting_for_new_owner"
-    ):
+    global owner_id
+
+    if not context.user_data.get("waiting_owner"):
+
         return
 
-    if not is_owner(
-        update.effective_user.id
-    ):
+    if not is_owner(update.effective_user.id):
+
         return
 
     text = update.message.text.strip()
 
     try:
 
-        new_owner_id = int(text)
+        new_owner = int(text)
 
     except ValueError:
 
         await update.message.reply_text(
-            "❌ آیدی عددی صحیح نیست.\n\n"
-            "مثال:\n"
-            "123456789"
+            "❌ آیدی عددی اشتباه است."
         )
 
         return
 
-    data["owner_id"] = new_owner_id
+    owner_id = new_owner
 
-    save_data(data)
-
-    context.user_data[
-        "waiting_for_new_owner"
-    ] = False
+    context.user_data["waiting_owner"] = False
 
     await update.message.reply_text(
-        "✅ انتقال مالکیت با موفقیت انجام شد.\n\n"
-        f"👑 مالک جدید:\n"
-        f"{new_owner_id}"
+        "✅ انتقال مالکیت کامل شد.\n\n"
+        f"👑 مالک جدید:\n{new_owner}"
     )
 
 
-# =========================
+# ==================================================
 # بازگشت
-# =========================
+# ==================================================
 
 async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -812,93 +680,68 @@ async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
-    user_id = query.from_user.id
-
-    if not await is_channel_member(
-        user_id,
-        context
-    ):
-
-        await require_channel(
-            update,
-            context
-        )
-
-        return
-
     await query.message.edit_text(
-        "🏠 منوی اصلی\n\n"
-        "گزینه مورد نظر خودت رو انتخاب کن:",
+        "🏠 منوی اصلی",
         reply_markup=main_menu()
     )
 
 
-# =========================
-# Callback
-# =========================
+# ==================================================
+# دکمه‌ها
+# ==================================================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
-    if query.data == "check_membership":
+    if query.data == "check_join":
 
-        await check_membership(
-            update,
-            context
-        )
+        await check_join(update, context)
 
     elif query.data == "free_account":
 
-        await free_account(
-            update,
-            context
-        )
+        await free_account(update, context)
 
     elif query.data == "combo":
 
-        await combo(
-            update,
-            context
-        )
+        await combo(update, context)
 
     elif query.data == "my_link":
 
-        await my_link(
-            update,
-            context
-        )
+        await my_link(update, context)
 
     elif query.data == "claim_free":
 
-        await claim_free(
-            update,
-            context
-        )
+        await claim_free(update, context)
 
     elif query.data == "claim_combo":
 
-        await claim_combo(
-            update,
-            context
-        )
+        await claim_combo(update, context)
 
     elif query.data == "back":
 
-        await back(
+        await back(update, context)
+
+
+# ==================================================
+# پیام‌های متنی
+# ==================================================
+
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if context.user_data.get("waiting_owner"):
+
+        await receive_owner_id(
             update,
             context
         )
 
 
-# =========================
-# خطاها
-# =========================
+# ==================================================
+# خطا
+# ==================================================
 
-async def error_handler(
-    update: object,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def error_handler(update, context):
 
     print(
         "ERROR:",
@@ -906,16 +749,16 @@ async def error_handler(
     )
 
 
-# =========================
+# ==================================================
 # اجرای ربات
-# =========================
+# ==================================================
 
 def main():
 
-    if not BOT_TOKEN or BOT_TOKEN == "توکن_جدید_ربات":
+    if BOT_TOKEN == "توکن_واقعی_ربات_را_اینجا_بگذار":
 
         raise ValueError(
-            "BOT_TOKEN را وارد کنید."
+            "توکن ربات را داخل BOT_TOKEN قرار بده."
         )
 
     app = (
@@ -948,7 +791,7 @@ def main():
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            receive_owner_id
+            text_handler
         )
     )
 
@@ -956,13 +799,10 @@ def main():
         error_handler
     )
 
-    print(
-        "Bot is running..."
-    )
+    print("Bot is running...")
 
     app.run_polling()
 
 
 if __name__ == "__main__":
-
     main()

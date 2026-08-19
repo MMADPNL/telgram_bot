@@ -19,7 +19,7 @@ from telegram.ext import (
 # تنظیمات
 # =========================
 
-BOT_TOKEN = 8790498730:AAFJ1WAmwMSSBFsgrnoxCJQFfm59Wo6I214
+BOT_TOKEN = "8790498730:AAFJ1WAmwMSSBFsgrnoxCJQFfm59Wo6I214"
 
 OWNER_ID = 8552447077
 

@@ -5,10 +5,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
-    filters,
 )
 
 
@@ -29,107 +27,144 @@ GROUP_LINK = "https://t.me/gap_bazi12"
 BALANCE_FILE = "balances.json"
 OWNER_FILE = "owner.json"
 
-START_BALANCE = 0
-MIN_BET = 100
+START_POINTS = 0
 
 
 # ==================================================
-# BALANCE FUNCTIONS
+# FILE FUNCTIONS
 # ==================================================
 
-def load_balances():
-    if not os.path.exists(BALANCE_FILE):
-        return {}
+def load_json(filename, default):
+    if not os.path.exists(filename):
+        return default
 
     try:
-        with open(BALANCE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        with open(filename, "r", encoding="utf-8") as file:
+            data = json.load(file)
 
-        if isinstance(data, dict):
-            return data
-
-        return {}
+        return data
 
     except Exception as e:
-        print("BALANCE LOAD ERROR:", e)
-        return {}
+        print(f"LOAD ERROR {filename}:", e)
+        return default
 
 
-def save_balances(data):
-    with open(BALANCE_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            data,
-            f,
-            ensure_ascii=False,
-            indent=2
-        )
+def save_json(filename, data):
+    try:
+        with open(filename, "w", encoding="utf-8") as file:
+            json.dump(
+                data,
+                file,
+                ensure_ascii=False,
+                indent=2
+            )
+
+        return True
+
+    except Exception as e:
+        print(f"SAVE ERROR {filename}:", e)
+        return False
 
 
-def get_balance(user_id):
-    data = load_balances()
+# ==================================================
+# POINTS
+# ==================================================
+
+def get_points(user_id):
+    data = load_json(BALANCE_FILE, {})
+
+    if not isinstance(data, dict):
+        data = {}
+
     uid = str(user_id)
 
     if uid not in data:
-        data[uid] = START_BALANCE
-        save_balances(data)
+        data[uid] = START_POINTS
+        save_json(BALANCE_FILE, data)
 
     try:
         return int(data[uid])
 
     except (ValueError, TypeError):
-        data[uid] = START_BALANCE
-        save_balances(data)
-        return START_BALANCE
+        data[uid] = START_POINTS
+        save_json(BALANCE_FILE, data)
+        return START_POINTS
 
 
-def set_balance(user_id, amount):
-    data = load_balances()
-    data[str(user_id)] = int(amount)
-    save_balances(data)
+def set_points(user_id, amount):
+    data = load_json(BALANCE_FILE, {})
 
+    if not isinstance(data, dict):
+        data = {}
 
-def add_balance(user_id, amount):
-    current = get_balance(user_id)
+    data[str(user_id)] = max(0, int(amount))
 
-    set_balance(
-        user_id,
-        current + int(amount)
+    save_json(
+        BALANCE_FILE,
+        data
     )
 
 
-# ==================================================
-# OWNER FUNCTIONS
-# ==================================================
+def add_points(user_id, amount):
+    current = get_points(user_id)
 
-def save_owner(user_id):
-    with open(OWNER_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "owner_id": int(user_id)
-            },
-            f,
-            ensure_ascii=False,
-            indent=2
-        )
+    new_amount = current + int(amount)
 
+    if new_amount < 0:
+        new_amount = 0
+
+    set_points(
+        user_id,
+        new_amount
+    )
+
+    return new_amount
+
+
+# ==================================================
+# OWNER
+# ==================================================
 
 def load_owner():
     if not os.path.exists(OWNER_FILE):
-        save_owner(OWNER_ID)
-        return int(OWNER_ID)
+
+        save_json(
+            OWNER_FILE,
+            {
+                "owner_id": OWNER_ID
+            }
+        )
+
+        return OWNER_ID
+
+    data = load_json(
+        OWNER_FILE,
+        {
+            "owner_id": OWNER_ID
+        }
+    )
 
     try:
-        with open(OWNER_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
         return int(data["owner_id"])
 
-    except Exception as e:
-        print("OWNER LOAD ERROR:", e)
+    except Exception:
+        save_json(
+            OWNER_FILE,
+            {
+                "owner_id": OWNER_ID
+            }
+        )
 
-        save_owner(OWNER_ID)
+        return OWNER_ID
 
-        return int(OWNER_ID)
+
+def save_owner(user_id):
+    save_json(
+        OWNER_FILE,
+        {
+            "owner_id": int(user_id)
+        }
+    )
 
 
 def is_owner(user_id):
@@ -141,60 +176,77 @@ def is_owner(user_id):
 # ==================================================
 
 async def check_membership(bot, user_id):
+
     try:
-        channel_member = await bot.get_chat_member(
+
+        channel = await bot.get_chat_member(
             CHANNEL_USERNAME,
             user_id
         )
 
-        group_member = await bot.get_chat_member(
+        group = await bot.get_chat_member(
             GROUP_USERNAME,
             user_id
         )
 
-        valid_statuses = {
+        valid = {
             "member",
             "administrator",
             "creator"
         }
 
         return (
-            channel_member.status in valid_statuses
+            channel.status in valid
             and
-            group_member.status in valid_statuses
+            group.status in valid
         )
 
     except Exception as e:
-        print("MEMBERSHIP ERROR:", e)
+
+        print(
+            "MEMBERSHIP ERROR:",
+            e
+        )
+
         return False
 
 
 def membership_keyboard():
+
     return InlineKeyboardMarkup([
+
         [
             InlineKeyboardButton(
-                "📢 عضویت در کانال",
+                "📢 کانال",
                 url=CHANNEL_LINK
             )
         ],
+
         [
             InlineKeyboardButton(
-                "💬 عضویت در گپ",
+                "💬 گپ",
                 url=GROUP_LINK
             )
         ],
+
         [
             InlineKeyboardButton(
                 "✅ عضو شدم",
                 callback_data="check_membership"
             )
         ]
+
     ])
 
 
-async def require_membership(update, context):
+async def require_membership(
+    update,
+    context
+):
+
     user_id = update.effective_user.id
 
+    # مالک نیازی به عضویت اجباری ندارد
     if is_owner(user_id):
         return True
 
@@ -206,18 +258,21 @@ async def require_membership(update, context):
 
     text = (
         "🚫 دسترسی بسته است.\n\n"
-        "برای استفاده از ربات باید عضو هر دو مورد زیر باشید:\n\n"
+        "برای استفاده از ربات ابتدا عضو این دو مورد شو:\n\n"
         "📢 کانال\n"
         "💬 گپ\n\n"
-        "بعد از عضویت روی «✅ عضو شدم» بزن."
+        "بعد روی «✅ عضو شدم» بزن."
     )
 
     if update.callback_query:
+
         await update.callback_query.message.reply_text(
             text,
             reply_markup=membership_keyboard()
         )
-    else:
+
+    elif update.message:
+
         await update.message.reply_text(
             text,
             reply_markup=membership_keyboard()
@@ -227,58 +282,60 @@ async def require_membership(update, context):
 
 
 # ==================================================
-# MAIN KEYBOARD
+# MAIN MENU
 # ==================================================
 
 def main_keyboard(user_id):
 
     buttons = [
+
         [
             InlineKeyboardButton(
                 "🎯 دارت",
                 callback_data="dart"
             ),
+
             InlineKeyboardButton(
                 "🎲 تاس",
                 callback_data="dice"
             )
         ],
+
         [
             InlineKeyboardButton(
-                "💸 برداشت",
-                callback_data="withdraw"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                "💳 موجودی",
+                "💳 امتیاز من",
                 callback_data="balance"
             )
         ]
+
     ]
 
-    # فقط مالک این دکمه‌ها را می‌بیند
+    # فقط مالک
     if is_owner(user_id):
 
-        buttons.append([
-            InlineKeyboardButton(
-                "💰 شارژ موجودی",
-                callback_data="charge"
-            )
-        ])
+        buttons.extend([
 
-        buttons.append([
-            InlineKeyboardButton(
-                "👑 انتقال مالکیت",
-                callback_data="transfer_owner"
-            )
-        ])
+            [
+                InlineKeyboardButton(
+                    "➕ شارژ امتیاز",
+                    callback_data="charge"
+                )
+            ],
 
-        buttons.append([
-            InlineKeyboardButton(
-                "🔄 ریست موجودی",
-                callback_data="reset_balance"
-            )
+            [
+                InlineKeyboardButton(
+                    "🔄 ریست امتیازها",
+                    callback_data="reset"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "👑 انتقال مالکیت",
+                    callback_data="transfer_owner"
+                )
+            ]
+
         ])
 
     return InlineKeyboardMarkup(buttons)
@@ -288,7 +345,10 @@ def main_keyboard(user_id):
 # START
 # ==================================================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     if not await require_membership(
         update,
@@ -298,60 +358,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
-    balance = get_balance(user.id)
+    points = get_points(user.id)
 
     await update.message.reply_text(
+
         f"سلام {user.first_name} 👋\n\n"
+
         "🤖 به ربات خوش آمدی.\n\n"
-        f"🆔 آیدی عددی:\n{user.id}\n\n"
-        f"💰 موجودی:\n{balance:,}\n\n"
-        "👇 از منوی زیر انتخاب کن:",
-        reply_markup=main_keyboard(user.id)
+
+        f"🆔 آیدی:\n{user.id}\n\n"
+
+        f"💰 امتیاز:\n{points:,}\n\n"
+
+        "🎮 یک بازی انتخاب کن:",
+
+        reply_markup=main_keyboard(
+            user.id
+        )
     )
-
-
-# ==================================================
-# RESET BALANCE
-# ==================================================
-
-async def reset_balance(update, context):
-
-    user_id = update.effective_user.id
-
-    if not is_owner(user_id):
-        await update.message.reply_text(
-            "❌ فقط مالک می‌تواند موجودی‌ها را ریست کند."
-        )
-        return
-
-    try:
-        save_balances({})
-
-        if load_balances() != {}:
-            await update.message.reply_text(
-                "❌ ریست انجام نشد."
-            )
-            return
-
-        await update.message.reply_text(
-            "✅ ریست موجودی انجام شد!\n\n"
-            "💰 موجودی تمام کاربران: 0\n"
-            "🗑 موجودی‌های قبلی پاک شدند."
-        )
-
-    except Exception as e:
-        print("RESET ERROR:", e)
-
-        await update.message.reply_text(
-            f"❌ خطا در ریست:\n{e}"
-        )
 
 
 # ==================================================
 # BUTTON HANDLER
 # ==================================================
 
-async def button_handler(update, context):
+async def button_handler(
+    update,
+    context
+):
 
     query = update.callback_query
 
@@ -360,7 +394,7 @@ async def button_handler(update, context):
     user_id = query.from_user.id
 
     # ==================================================
-    # CHECK MEMBERSHIP
+    # MEMBERSHIP CHECK
     # ==================================================
 
     if query.data == "check_membership":
@@ -375,15 +409,19 @@ async def button_handler(update, context):
         ):
 
             await query.message.reply_text(
+
                 "✅ عضویت تأیید شد.\n\n"
-                "حالا می‌تونی از ربات استفاده کنی.",
-                reply_markup=main_keyboard(user_id)
+                "🎮 حالا می‌تونی بازی کنی.",
+
+                reply_markup=main_keyboard(
+                    user_id
+                )
             )
 
         else:
 
             await query.message.reply_text(
-                "❌ هنوز عضو کانال و گپ نیستی.",
+                "❌ هنوز عضو هر دو مورد نیستی.",
                 reply_markup=membership_keyboard()
             )
 
@@ -405,39 +443,42 @@ async def button_handler(update, context):
 
     if query.data == "balance":
 
+        points = get_points(user_id)
+
         await query.message.reply_text(
-            "💳 موجودی شما:\n\n"
-            f"💰 {get_balance(user_id):,}"
+
+            "💳 امتیاز شما:\n\n"
+            f"💰 {points:,}"
+
         )
 
         return
 
     # ==================================================
-    # RESET BALANCE
+    # RESET
     # ==================================================
 
-    if query.data == "reset_balance":
+    if query.data == "reset":
 
         if not is_owner(user_id):
+
             await query.message.reply_text(
-                "❌ این بخش فقط برای مالک فعال است."
+                "❌ فقط مالک می‌تواند امتیازها را ریست کند."
             )
+
             return
 
-        try:
-            save_balances({})
+        save_json(
+            BALANCE_FILE,
+            {}
+        )
 
-            await query.message.reply_text(
-                "✅ ریست موجودی انجام شد!\n\n"
-                "💰 موجودی تمام کاربران صفر شد."
-            )
+        await query.message.reply_text(
 
-        except Exception as e:
-            print("RESET BUTTON ERROR:", e)
+            "✅ ریست انجام شد.\n\n"
+            "💰 امتیاز تمام کاربران صفر شد."
 
-            await query.message.reply_text(
-                f"❌ خطا:\n{e}"
-            )
+        )
 
         return
 
@@ -449,52 +490,85 @@ async def button_handler(update, context):
 
         context.user_data.clear()
 
-        context.user_data["state"] = "dart_color"
-
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    "⚪ سفید",
-                    callback_data="dart_white"
-                ),
-                InlineKeyboardButton(
-                    "🔴 قرمز",
-                    callback_data="dart_red"
-                )
-            ]
-        ])
+        context.user_data["game"] = "dart"
 
         await query.message.reply_text(
-            "🎯 دارت\n\n"
-            "اول رنگ را انتخاب کن:",
-            reply_markup=keyboard
+
+            "🎯 بازی دارت\n\n"
+            "🎯 روی دکمه زیر بزن تا دارت پرتاب شود.",
+
+            reply_markup=InlineKeyboardMarkup([
+
+                [
+                    InlineKeyboardButton(
+                        "🎯 پرتاب دارت",
+                        callback_data="throw_dart"
+                    )
+                ]
+
+            ])
         )
 
         return
 
     # ==================================================
-    # DART COLOR
+    # THROW DART
     # ==================================================
 
-    if query.data in (
-        "dart_white",
-        "dart_red"
-    ):
+    if query.data == "throw_dart":
 
-        color = (
-            "سفید"
-            if query.data == "dart_white"
-            else "قرمز"
+        if context.user_data.get("game") != "dart":
+
+            await query.message.reply_text(
+                "❌ این بازی فعال نیست."
+            )
+
+            return
+
+        try:
+
+            result = await context.bot.send_dice(
+                chat_id=query.message.chat_id,
+                emoji="🎯"
+            )
+
+            value = result.dice.value
+
+        except Exception as e:
+
+            print(
+                "DART ERROR:",
+                e
+            )
+
+            await query.message.reply_text(
+                "❌ خطا در اجرای دارت."
+            )
+
+            return
+
+        # امتیاز دارت
+        points = value * 10
+
+        new_points = add_points(
+            user_id,
+            points
         )
-
-        context.user_data["dart_color"] = color
-        context.user_data["state"] = "dart_bet"
 
         await query.message.reply_text(
-            f"🎯 انتخاب شما: {color}\n\n"
-            "💰 تعداد شرط را وارد کنید:\n"
-            f"حداقل: {MIN_BET}"
+
+            "🎯 نتیجه دارت\n\n"
+
+            f"🔢 عدد: {value}\n"
+            f"➕ امتیاز: {points:,}\n\n"
+            f"💰 امتیاز فعلی: {new_points:,}",
+
+            reply_markup=main_keyboard(
+                user_id
+            )
         )
+
+        context.user_data.clear()
 
         return
 
@@ -506,68 +580,115 @@ async def button_handler(update, context):
 
         context.user_data.clear()
 
-        context.user_data["state"] = "dice_type"
-
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    "🟢 زوج",
-                    callback_data="dice_even"
-                ),
-                InlineKeyboardButton(
-                    "🔵 فرد",
-                    callback_data="dice_odd"
-                )
-            ]
-        ])
+        context.user_data["game"] = "dice"
 
         await query.message.reply_text(
-            "🎲 تاس\n\n"
-            "زوج یا فرد را انتخاب کن:",
-            reply_markup=keyboard
+
+            "🎲 بازی تاس\n\n"
+            "🎲 روی دکمه زیر بزن تا تاس انداخته شود.",
+
+            reply_markup=InlineKeyboardMarkup([
+
+                [
+                    InlineKeyboardButton(
+                        "🎲 انداختن تاس",
+                        callback_data="throw_dice"
+                    )
+                ]
+
+            ])
         )
 
         return
 
     # ==================================================
-    # DICE TYPE
+    # THROW DICE
     # ==================================================
 
-    if query.data in (
-        "dice_even",
-        "dice_odd"
-    ):
+    if query.data == "throw_dice":
 
-        choice = (
-            "زوج"
-            if query.data == "dice_even"
-            else "فرد"
+        if context.user_data.get("game") != "dice":
+
+            await query.message.reply_text(
+                "❌ این بازی فعال نیست."
+            )
+
+            return
+
+        try:
+
+            result = await context.bot.send_dice(
+                chat_id=query.message.chat_id,
+                emoji="🎲"
+            )
+
+            value = result.dice.value
+
+        except Exception as e:
+
+            print(
+                "DICE ERROR:",
+                e
+            )
+
+            await query.message.reply_text(
+                "❌ خطا در اجرای تاس."
+            )
+
+            return
+
+        # امتیاز بر اساس عدد تاس
+        points = value * 10
+
+        new_points = add_points(
+            user_id,
+            points
         )
-
-        context.user_data["dice_choice"] = choice
-        context.user_data["state"] = "dice_bet"
 
         await query.message.reply_text(
-            f"🎲 انتخاب شما: {choice}\n\n"
-            "💰 تعداد شرط را وارد کنید:\n"
-            f"حداقل: {MIN_BET}"
+
+            "🎲 نتیجه تاس\n\n"
+
+            f"🔢 عدد: {value}\n"
+            f"➕ امتیاز: {points:,}\n\n"
+            f"💰 امتیاز فعلی: {new_points:,}",
+
+            reply_markup=main_keyboard(
+                user_id
+            )
         )
-
-        return
-
-    # ==================================================
-    # WITHDRAW
-    # ==================================================
-
-    if query.data == "withdraw":
 
         context.user_data.clear()
 
-        context.user_data["state"] = "withdraw"
+        return
+
+    # ==================================================
+    # CHARGE
+    # ==================================================
+
+    if query.data == "charge":
+
+        if not is_owner(user_id):
+
+            await query.message.reply_text(
+                "❌ فقط مالک می‌تواند امتیاز شارژ کند."
+            )
+
+            return
+
+        context.user_data.clear()
+
+        context.user_data["state"] = "charge"
 
         await query.message.reply_text(
-            "💸 برداشت\n\n"
-            "تعداد برداشت را وارد کنید:"
+
+            "➕ شارژ امتیاز\n\n"
+
+            "آیدی کاربر و مقدار را با فاصله بفرست.\n\n"
+
+            "مثال:\n"
+            "123456789 5000"
+
         )
 
         return
@@ -579,9 +700,11 @@ async def button_handler(update, context):
     if query.data == "transfer_owner":
 
         if not is_owner(user_id):
+
             await query.message.reply_text(
                 "❌ فقط مالک اجازه دارد."
             )
+
             return
 
         context.user_data.clear()
@@ -589,275 +712,23 @@ async def button_handler(update, context):
         context.user_data["state"] = "transfer_owner"
 
         await query.message.reply_text(
+
             "👑 انتقال مالکیت\n\n"
-            "آیدی عددی مالک جدید را ارسال کن:"
+            "آیدی عددی مالک جدید را بفرست:"
+
         )
 
         return
-
-    # ==================================================
-    # CHARGE
-    # ==================================================
-
-    if query.data == "charge":
-
-        if not is_owner(user_id):
-            await query.message.reply_text(
-                "❌ فقط مالک اجازه دارد."
-            )
-            return
-
-        context.user_data.clear()
-
-        context.user_data["state"] = "charge"
-
-        await query.message.reply_text(
-            "💰 شارژ موجودی\n\n"
-            "آیدی عددی و مقدار را با فاصله ارسال کن.\n\n"
-            "مثال:\n"
-            "123456789 50000"
-        )
-
-        return
-
-
-# ==================================================
-# DART GAME
-# ==================================================
-
-async def play_dart(update, context, amount):
-
-    user = update.effective_user
-    user_id = user.id
-
-    selected_color = context.user_data.get(
-        "dart_color"
-    )
-
-    if amount < MIN_BET:
-
-        await update.message.reply_text(
-            f"❌ حداقل شرط {MIN_BET} است."
-        )
-
-        return
-
-    balance = get_balance(user_id)
-
-    if amount > balance:
-
-        await update.message.reply_text(
-            "❌ موجودی کافی نیست.\n\n"
-            f"💰 موجودی: {balance:,}"
-        )
-
-        return
-
-    add_balance(
-        user_id,
-        -amount
-    )
-
-    try:
-
-        dice_message = await context.bot.send_dice(
-            chat_id=CHANNEL_USERNAME,
-            emoji="🎯"
-        )
-
-        value = dice_message.dice.value
-
-    except Exception as e:
-
-        add_balance(
-            user_id,
-            amount
-        )
-
-        print("DART ERROR:", e)
-
-        await update.message.reply_text(
-            "❌ ارسال دارت انجام نشد.\n\n"
-            "💰 شرط شما برگشت داده شد."
-        )
-
-        return
-
-    result_color = (
-        "سفید"
-        if value <= 3
-        else "قرمز"
-    )
-
-    if result_color == selected_color:
-
-        reward = amount * 2
-
-        add_balance(
-            user_id,
-            reward
-        )
-
-        result_text = (
-            "🎉 برنده شد!\n"
-            f"💰 دریافتی: {reward:,}"
-        )
-
-    else:
-
-        result_text = (
-            "❌ باخت!\n"
-            f"💸 باخت: {amount:,}"
-        )
-
-    try:
-
-        await context.bot.send_message(
-            chat_id=CHANNEL_USERNAME,
-            text=(
-                "🎯 نتیجه دارت\n\n"
-                f"👤 نام: {user.first_name}\n"
-                f"🆔 آیدی: {user_id}\n"
-                f"🎯 عدد: {value}\n"
-                f"🎨 نتیجه: {result_color}\n"
-                f"📌 انتخاب: {selected_color}\n"
-                f"💰 شرط: {amount:,}\n\n"
-                f"{result_text}"
-            )
-        )
-
-    except Exception as e:
-        print("DART RESULT ERROR:", e)
-
-    await update.message.reply_text(
-        "🎯 دارت در کانال انداخته شد.\n\n"
-        f"📢 {CHANNEL_LINK}"
-    )
-
-    context.user_data.clear()
-
-
-# ==================================================
-# DICE GAME
-# ==================================================
-
-async def play_dice(update, context, amount):
-
-    user = update.effective_user
-    user_id = user.id
-
-    selected = context.user_data.get(
-        "dice_choice"
-    )
-
-    if amount < MIN_BET:
-
-        await update.message.reply_text(
-            f"❌ حداقل شرط {MIN_BET} است."
-        )
-
-        return
-
-    balance = get_balance(user_id)
-
-    if amount > balance:
-
-        await update.message.reply_text(
-            "❌ موجودی کافی نیست.\n\n"
-            f"💰 موجودی: {balance:,}"
-        )
-
-        return
-
-    add_balance(
-        user_id,
-        -amount
-    )
-
-    try:
-
-        dice_message = await context.bot.send_dice(
-            chat_id=CHANNEL_USERNAME,
-            emoji="🎲"
-        )
-
-        value = dice_message.dice.value
-
-    except Exception as e:
-
-        add_balance(
-            user_id,
-            amount
-        )
-
-        print("DICE ERROR:", e)
-
-        await update.message.reply_text(
-            "❌ ارسال تاس انجام نشد.\n\n"
-            "💰 شرط شما برگشت داده شد."
-        )
-
-        return
-
-    result_type = (
-        "زوج"
-        if value % 2 == 0
-        else "فرد"
-    )
-
-    if result_type == selected:
-
-        reward = amount * 2
-
-        add_balance(
-            user_id,
-            reward
-        )
-
-        result_text = (
-            "🎉 برنده شد!\n"
-            f"💰 دریافتی: {reward:,}"
-        )
-
-    else:
-
-        result_text = (
-            "❌ باخت!\n"
-            f"💸 باخت: {amount:,}"
-        )
-
-    try:
-
-        await context.bot.send_message(
-            chat_id=CHANNEL_USERNAME,
-            text=(
-                "🎲 نتیجه تاس\n\n"
-                f"👤 نام: {user.first_name}\n"
-                f"🆔 آیدی: {user_id}\n"
-                f"🎲 عدد: {value}\n"
-                f"📌 نتیجه: {result_type}\n"
-                f"🎯 انتخاب: {selected}\n"
-                f"💰 شرط: {amount:,}\n\n"
-                f"{result_text}"
-            )
-        )
-
-    except Exception as e:
-        print("DICE RESULT ERROR:", e)
-
-    await update.message.reply_text(
-        "🎲 تاس در کانال انداخته شد.\n\n"
-        f"📢 {CHANNEL_LINK}"
-    )
-
-    context.user_data.clear()
 
 
 # ==================================================
 # TEXT HANDLER
 # ==================================================
 
-async def message_handler(update, context):
+async def text_handler(
+    update,
+    context
+):
 
     if not await require_membership(
         update,
@@ -868,9 +739,6 @@ async def message_handler(update, context):
     if not update.message:
         return
 
-    if not update.message.text:
-        return
-
     text = update.message.text.strip()
 
     state = context.user_data.get(
@@ -878,191 +746,6 @@ async def message_handler(update, context):
     )
 
     user_id = update.effective_user.id
-
-    # ==================================================
-    # DART BET
-    # ==================================================
-
-    if state == "dart_bet":
-
-        try:
-            amount = int(text)
-
-        except ValueError:
-
-            await update.message.reply_text(
-                "❌ فقط عدد وارد کن."
-            )
-
-            return
-
-        await play_dart(
-            update,
-            context,
-            amount
-        )
-
-        return
-
-    # ==================================================
-    # DICE BET
-    # ==================================================
-
-    if state == "dice_bet":
-
-        try:
-            amount = int(text)
-
-        except ValueError:
-
-            await update.message.reply_text(
-                "❌ فقط عدد وارد کن."
-            )
-
-            return
-
-        await play_dice(
-            update,
-            context,
-            amount
-        )
-
-        return
-
-    # ==================================================
-    # WITHDRAW
-    # ==================================================
-
-    if state == "withdraw":
-
-        try:
-            amount = int(text)
-
-        except ValueError:
-
-            await update.message.reply_text(
-                "❌ فقط عدد وارد کن."
-            )
-
-            return
-
-        if amount <= 0:
-
-            await update.message.reply_text(
-                "❌ مقدار باید بیشتر از صفر باشد."
-            )
-
-            return
-
-        balance = get_balance(user_id)
-
-        if amount > balance:
-
-            await update.message.reply_text(
-                "❌ موجودی کافی نیست.\n\n"
-                f"💰 موجودی: {balance:,}"
-            )
-
-            return
-
-        add_balance(
-            user_id,
-            -amount
-        )
-
-        try:
-
-            await context.bot.send_message(
-                chat_id=CHANNEL_USERNAME,
-                text=(
-                    "💸 درخواست برداشت\n\n"
-                    f"👤 نام: {update.effective_user.first_name}\n"
-                    f"🆔 آیدی: {user_id}\n"
-                    f"💰 مبلغ: {amount:,}\n\n"
-                    "📌 وضعیت: در انتظار بررسی مالک"
-                )
-            )
-
-        except Exception as e:
-
-            add_balance(
-                user_id,
-                amount
-            )
-
-            print(
-                "WITHDRAW ERROR:",
-                e
-            )
-
-            await update.message.reply_text(
-                "❌ ارسال درخواست انجام نشد.\n\n"
-                "💰 موجودی شما برگشت داده شد."
-            )
-
-            return
-
-        new_balance = get_balance(user_id)
-
-        await update.message.reply_text(
-            "✅ درخواست برداشت ثبت شد.\n\n"
-            f"💸 مبلغ: {amount:,}\n"
-            f"💰 موجودی باقی‌مانده: {new_balance:,}\n\n"
-            f"📢 {CHANNEL_LINK}"
-        )
-
-        context.user_data.clear()
-
-        return
-
-    # ==================================================
-    # TRANSFER OWNER
-    # ==================================================
-
-    if state == "transfer_owner":
-
-        if not is_owner(user_id):
-
-            context.user_data.clear()
-
-            await update.message.reply_text(
-                "❌ فقط مالک اجازه دارد."
-            )
-
-            return
-
-        try:
-
-            new_owner_id = int(text)
-
-        except ValueError:
-
-            await update.message.reply_text(
-                "❌ آیدی باید عددی باشد."
-            )
-
-            return
-
-        if new_owner_id <= 0:
-
-            await update.message.reply_text(
-                "❌ آیدی معتبر نیست."
-            )
-
-            return
-
-        save_owner(
-            new_owner_id
-        )
-
-        context.user_data.clear()
-
-        await update.message.reply_text(
-            "✅ انتقال مالکیت انجام شد.\n\n"
-            f"👑 مالک جدید:\n{new_owner_id}"
-        )
-
-        return
 
     # ==================================================
     # CHARGE
@@ -1085,9 +768,11 @@ async def message_handler(update, context):
         if len(parts) != 2:
 
             await update.message.reply_text(
+
                 "❌ فرمت اشتباه است.\n\n"
                 "مثال:\n"
-                "123456789 50000"
+                "123456789 5000"
+
             )
 
             return
@@ -1100,12 +785,67 @@ async def message_handler(update, context):
         except ValueError:
 
             await update.message.reply_text(
-                "❌ آیدی و مقدار باید عدد باشند."
+                "❌ هر دو مقدار باید عدد باشند."
             )
 
             return
 
-        if target_id <= 0:
+        if target_id <= 0 or amount <= 0:
+
+            await update.message.reply_text(
+                "❌ مقدار واردشده معتبر نیست."
+            )
+
+            return
+
+        new_points = add_points(
+            target_id,
+            amount
+        )
+
+        context.user_data.clear()
+
+        await update.message.reply_text(
+
+            "✅ امتیاز شارژ شد.\n\n"
+
+            f"👤 آیدی: {target_id}\n"
+            f"➕ مقدار: {amount:,}\n"
+            f"💰 امتیاز جدید: {new_points:,}"
+
+        )
+
+        return
+
+    # ==================================================
+    # TRANSFER OWNER
+    # ==================================================
+
+    if state == "transfer_owner":
+
+        if not is_owner(user_id):
+
+            context.user_data.clear()
+
+            await update.message.reply_text(
+                "❌ فقط مالک اجازه دارد."
+            )
+
+            return
+
+        try:
+
+            new_owner = int(text)
+
+        except ValueError:
+
+            await update.message.reply_text(
+                "❌ آیدی باید عددی باشد."
+            )
+
+            return
+
+        if new_owner <= 0:
 
             await update.message.reply_text(
                 "❌ آیدی معتبر نیست."
@@ -1113,30 +853,17 @@ async def message_handler(update, context):
 
             return
 
-        if amount <= 0:
-
-            await update.message.reply_text(
-                "❌ مقدار باید بیشتر از صفر باشد."
-            )
-
-            return
-
-        add_balance(
-            target_id,
-            amount
-        )
-
-        new_balance = get_balance(
-            target_id
+        save_owner(
+            new_owner
         )
 
         context.user_data.clear()
 
         await update.message.reply_text(
-            "✅ موجودی شارژ شد.\n\n"
-            f"👤 آیدی: {target_id}\n"
-            f"💰 شارژ: {amount:,}\n"
-            f"💳 موجودی جدید: {new_balance:,}"
+
+            "✅ انتقال مالکیت انجام شد.\n\n"
+            f"👑 مالک جدید:\n{new_owner}"
+
         )
 
         return
@@ -1146,7 +873,10 @@ async def message_handler(update, context):
 # BALANCE COMMAND
 # ==================================================
 
-async def balance_command(update, context):
+async def balance_command(
+    update,
+    context
+):
 
     if not await require_membership(
         update,
@@ -1156,9 +886,15 @@ async def balance_command(update, context):
 
     user_id = update.effective_user.id
 
+    points = get_points(
+        user_id
+    )
+
     await update.message.reply_text(
-        "💳 موجودی شما:\n\n"
-        f"💰 {get_balance(user_id):,}"
+
+        "💳 امتیاز شما:\n\n"
+        f"💰 {points:,}"
+
     )
 
 
@@ -1170,7 +906,9 @@ def main():
 
     if BOT_TOKEN == "توکن_ربات_اینجا":
 
-        print("❌ BOT_TOKEN را وارد کن.")
+        print(
+            "❌ اول BOT_TOKEN را وارد کن."
+        )
 
         return
 
@@ -1181,6 +919,7 @@ def main():
         .build()
     )
 
+    # Commands
     app.add_handler(
         CommandHandler(
             "start",
@@ -1195,34 +934,24 @@ def main():
         )
     )
 
-    app.add_handler(
-        CommandHandler(
-            "reset",
-            reset_balance
-        )
-    )
-
-    app.add_handler(
-        CommandHandler(
-            "resetbalance",
-            reset_balance
-        )
-    )
-
+    # Buttons
     app.add_handler(
         CallbackQueryHandler(
             button_handler
         )
     )
 
+    # Text
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            message_handler
+            text_handler
         )
     )
 
-    print("🤖 Bot is running...")
+    print(
+        "🤖 Bot is running..."
+    )
 
     app.run_polling(
         drop_pending_updates=True

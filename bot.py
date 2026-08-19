@@ -1,309 +1,603 @@
 import json
 import os
-import random
-import re
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 
-TOKEN = "8981045477:AAHCiu01fynQ0mkwCTS_W4wlnIZfawdlzLM"
+# =========================
+# تنظیمات
+# =========================
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+
 OWNER_ID = 8552447077
-OWNER_BALANCE = 50_000_000
 
-DATA_FILE = "balances.json"
-STATS_FILE = "stats.json"
+CHANNEL_USERNAME = "@prmiumfarsi"
+CHANNEL_LINK = "https://t.me/prmiumfarsi"
 
-# ایموجی‌های تاس
-DICE_EMOJIS = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
+DATA_FILE = "users.json"
+
+
+# =========================
+# دیتابیس ساده JSON
+# =========================
 
 def load_data():
-    if not os.path.exists(DATA_FILE): return {}
-    with open(DATA_FILE, "r") as f: return json.load(f)
+    if not os.path.exists(DATA_FILE):
+        return {
+            "owner_id": OWNER_ID,
+            "users": {}
+        }
 
-def save_data(d):
-    with open(DATA_FILE, "w") as f: json.dump(d, f, indent=4)
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {
+            "owner_id": OWNER_ID,
+            "users": {}
+        }
 
-def get_balance(uid):
-    data = load_data()
-    uid = str(uid)
-    if int(uid) == OWNER_ID and uid not in data:
-        data[uid] = OWNER_BALANCE
+
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+data = load_data()
+
+
+# =========================
+# کاربر
+# =========================
+
+def get_user(user_id):
+    uid = str(user_id)
+
+    if uid not in data["users"]:
+        data["users"][uid] = {
+            "invited": 0,
+            "invited_users": [],
+            "combo_claimed": False,
+            "free_claimed": False,
+        }
         save_data(data)
-    return data.get(uid, 0)
 
-def set_balance(uid, amt):
-    data = load_data()
-    data[str(uid)] = amt
-    save_data(data)
+    return data["users"][uid]
 
-def add_balance(uid, amt):
-    set_balance(uid, get_balance(uid) + amt)
 
-def load_stats():
-    if not os.path.exists(STATS_FILE): return {}
-    with open(STATS_FILE, "r") as f: return json.load(f)
+def is_owner(user_id):
+    return int(user_id) == int(data["owner_id"])
 
-def save_stats(d):
-    with open(STATS_FILE, "w") as f: json.dump(d, f, indent=4)
 
-def get_stats(uid):
-    return load_stats().get(str(uid), {"wins":0, "losses":0, "draws":0})
+# =========================
+# منوی اصلی
+# =========================
 
-def update_stats(uid, res):
-    d = load_stats()
-    uid = str(uid)
-    if uid not in d: d[uid] = {"wins":0, "losses":0, "draws":0}
-    d[uid][res] += 1
-    save_stats(d)
+def main_menu():
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🎁 اک رایگان",
+                callback_data="free_account"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "💯 کمبو 100درصد",
+                callback_data="combo"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "👥 لینک دعوت من",
+                callback_data="my_link"
+            )
+        ],
+    ]
 
-def get_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎲 تاس", callback_data="dice")],
-        [InlineKeyboardButton("🏀 بسکتبال", callback_data="basketball")],
-        [InlineKeyboardButton("🎳 بولینگ", callback_data="bowling")],
-        [InlineKeyboardButton("🎯 دارت", callback_data="dart")],
-        [InlineKeyboardButton("💰 موجودی", callback_data="balance")],
-        [InlineKeyboardButton("📊 آمار", callback_data="stats")],
-    ])
+    return InlineKeyboardMarkup(keyboard)
 
-async def start(update, context):
-    await update.message.reply_text(
-        "🎮 **به ربات بازی خوش اومدی!**\n\n"
-        "📌 **فرمت بازی:**\n"
-        "`1تاس 200`\n`1بسکتبال 150`\n`1بولینگ 100`\n`1دارت 300`\n\n"
-        "💰 شرط: **۵۰** تا **۵۰۰۰** سکه\n\n"
-        "📌 **دستورات:**\n"
-        "/balance - موجودی\n/stats - آمار\n"
-        "/transfer 100 123456789 - انتقال سکه\n"
-        "/reset - ریست موجودی (مالک)\n/resetstats - ریست آمار (مالک)\n/resetall - ریست کامل (مالک)",
-        reply_markup=get_keyboard()
+
+# =========================
+# /start
+# =========================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.effective_user
+    user_id = user.id
+
+    get_user(user_id)
+
+    # بررسی لینک دعوت
+    if context.args:
+
+        try:
+            inviter_id = int(context.args[0])
+
+            if inviter_id != user_id:
+
+                inviter = get_user(inviter_id)
+
+                # فقط اگر این کاربر قبلاً دعوت نشده باشد
+                if str(user_id) not in inviter["invited_users"]:
+
+                    inviter["invited_users"].append(str(user_id))
+                    inviter["invited"] += 1
+
+                    save_data(data)
+
+        except (ValueError, TypeError):
+            pass
+
+    text = (
+        f"سلام {user.first_name} 👋\n\n"
+        "به ربات خوش آمدید ❤️\n\n"
+        "از منوی زیر گزینه مورد نظر خودت رو انتخاب کن:"
     )
 
-async def handle_game(update, context):
-    try:
-        text = update.message.text.strip()
-        uid = update.effective_user.id
-        
-        pattern = r'^1(تاس|بسکتبال|بولینگ|دارت)\s*(\d+)$'
-        match = re.match(pattern, text)
-        
-        if not match:
-            await update.message.reply_text(
-                "❌ **فرمت اشتباه!**\n\n"
-                "📌 **فرمت صحیح:**\n"
-                "`1تاس 200` یا `1تاس200`\n"
-                "`1بسکتبال 150` یا `1بسکتبال150`\n"
-                "`1بولینگ 100` یا `1بولینگ100`\n"
-                "`1دارت 300` یا `1دارت300`"
-            )
-            return
-            
-        game_name = match.group(1)
-        bet = int(match.group(2))
-        
-        if bet < 50 or bet > 5000:
-            await update.message.reply_text("❌ شرط باید بین **۵۰** تا **۵۰۰۰** سکه باشد!")
-            return
-            
-        if get_balance(uid) < bet:
-            await update.message.reply_text(f"❌ موجودی کافی نیست! (موجودی: {get_balance(uid)})")
-            return
+    await update.message.reply_text(
+        text,
+        reply_markup=main_menu()
+    )
 
-        # ==================== بازی تاس ====================
-        if game_name == "تاس":
-            user_roll = random.randint(1, 6)  # اول کاربر
-            bot_roll = random.randint(1, 6)   # بعد ربات
-            
-            user_emoji = DICE_EMOJIS[user_roll - 1]
-            bot_emoji = DICE_EMOJIS[bot_roll - 1]
-            
-            if user_roll > bot_roll:
-                add_balance(uid, bet*2)
-                update_stats(uid, "wins")
-                result = f"🎉 بردی! +{bet*2} سکه"
-            elif user_roll < bot_roll:
-                add_balance(uid, -bet)
-                update_stats(uid, "losses")
-                result = f"😢 باختی! -{bet} سکه"
-            else:
-                update_stats(uid, "draws")
-                result = "🤝 مساوی! شرط برگشت"
-            
-            await update.message.reply_text(
-                f"🎲 **بازی تاس**\n\n"
-                f"🎲 **پرتاب تو:** {user_emoji}  ({user_roll})\n"
-                f"🎲 **پرتاب ربات:** {bot_emoji}  ({bot_roll})\n"
-                f"💰 شرط: {bet} سکه\n"
-                f"📌 {result}"
-            )
 
-        # ==================== بازی بسکتبال ====================
-        elif game_name == "بسکتبال":
-            user_score = random.choice(["🏀 گل کردی! ✅", "🏀 گل نشد! ❌"])  # اول کاربر
-            bot_score = random.choice(["🏀 گل کردی! ✅", "🏀 گل نشد! ❌"])   # بعد ربات
-            
-            if user_score == "🏀 گل کردی! ✅" and bot_score == "🏀 گل نشد! ❌":
-                add_balance(uid, bet*3)
-                update_stats(uid, "wins")
-                result = f"🌟 +{bet*3} سکه"
-            elif user_score == "🏀 گل نشد! ❌" and bot_score == "🏀 گل کردی! ✅":
-                add_balance(uid, -bet)
-                update_stats(uid, "losses")
-                result = f"💔 -{bet} سکه"
-            else:
-                update_stats(uid, "draws")
-                result = "🤝 مساوی! شرط برگشت"
-            
-            await update.message.reply_text(
-                f"🏀 **بازی بسکتبال**\n\n"
-                f"🏀 **شوت تو:** {user_score}\n"
-                f"🏀 **شوت ربات:** {bot_score}\n"
-                f"💰 شرط: {bet} سکه\n"
-                f"📌 {result}"
-            )
+# =========================
+# لینک دعوت
+# =========================
 
-        # ==================== بازی بولینگ ====================
-        elif game_name == "بولینگ":
-            user_pins = random.randint(0, 10)  # اول کاربر
-            bot_pins = random.randint(0, 10)   # بعد ربات
-            
-            if user_pins > bot_pins:
-                win = bet * 2
-                add_balance(uid, win)
-                update_stats(uid, "wins")
-                result = f"🎉 بردی! +{win} سکه"
-            elif user_pins < bot_pins:
-                add_balance(uid, -bet)
-                update_stats(uid, "losses")
-                result = f"😢 باختی! -{bet} سکه"
-            else:
-                update_stats(uid, "draws")
-                result = "🤝 مساوی! شرط برگشت"
-            
-            await update.message.reply_text(
-                f"🎳 **بازی بولینگ**\n\n"
-                f"🎳 **پین‌های تو:** {user_pins} / ۱۰\n"
-                f"🎳 **پین‌های ربات:** {bot_pins} / ۱۰\n"
-                f"💰 شرط: {bet} سکه\n"
-                f"📌 {result}"
-            )
+async def my_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        # ==================== بازی دارت ====================
-        elif game_name == "دارت":
-            target = random.randint(1, 10)          # هدف مشترک
-            user_throw = random.randint(1, 10)      # اول کاربر
-            bot_throw = random.randint(1, 10)       # بعد ربات
-            
-            user_diff = abs(user_throw - target)
-            bot_diff = abs(bot_throw - target)
-            
-            if user_diff < bot_diff:
-                win = bet * 2
-                add_balance(uid, win)
-                update_stats(uid, "wins")
-                result = f"🎯 بردی! +{win} سکه"
-            elif user_diff > bot_diff:
-                add_balance(uid, -bet)
-                update_stats(uid, "losses")
-                result = f"😢 باختی! -{bet} سکه"
-            else:
-                update_stats(uid, "draws")
-                result = "🤝 مساوی! شرط برگشت"
-            
-            await update.message.reply_text(
-                f"🎯 **بازی دارت**\n\n"
-                f"🎯 **هدف:** {target}\n"
-                f"🎯 **پرتاب تو:** {user_throw} (فاصله: {user_diff})\n"
-                f"🎯 **پرتاب ربات:** {bot_throw} (فاصله: {bot_diff})\n"
-                f"💰 شرط: {bet} سکه\n"
-                f"📌 {result}"
-            )
+    query = update.callback_query
+    await query.answer()
 
-    except Exception as e:
-        logger.error(f"handle_game error: {e}")
-        await update.message.reply_text(f"❌ خطا: {e}")
+    bot = await context.bot.get_me()
 
-async def balance(update, context):
-    await update.message.reply_text(f"💰 موجودی: {get_balance(update.effective_user.id):,} سکه")
+    user_id = query.from_user.id
 
-async def stats(update, context):
-    s = get_stats(update.effective_user.id)
-    await update.message.reply_text(f"📊 برد: {s['wins']}\nباخت: {s['losses']}\nمساوی: {s['draws']}")
+    link = f"https://t.me/{bot.username}?start={user_id}"
 
-async def transfer(update, context):
-    try:
-        if len(context.args) < 2:
-            await update.message.reply_text("❌ /transfer 100 123456789")
-            return
-        amt = int(context.args[0])
-        tid = int(context.args[1])
-        uid = update.effective_user.id
-        if amt <= 0 or tid == uid or get_balance(uid) < amt:
-            await update.message.reply_text("❌ خطا")
-            return
-        add_balance(uid, -amt)
-        add_balance(tid, amt)
-        await update.message.reply_text(f"✅ {amt:,} سکه منتقل شد")
-    except Exception as e:
-        logger.error(f"transfer error: {e}")
-        await update.message.reply_text(f"❌ خطا: {e}")
+    user = get_user(user_id)
 
-async def reset(update, context):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("❌ فقط مالک")
+    text = (
+        "🔗 لینک دعوت اختصاصی شما:\n\n"
+        f"{link}\n\n"
+        f"👥 تعداد دعوت‌های شما: {user['invited']}\n\n"
+        "این لینک را برای دوستانت ارسال کن."
+    )
+
+    await query.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ])
+    )
+
+
+# =========================
+# اک رایگان
+# =========================
+
+async def free_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    user = get_user(user_id)
+
+    needed = 2
+    invited = user["invited"]
+
+    if user["free_claimed"]:
+        await query.message.edit_text(
+            "❌ شما قبلاً اک رایگان خود را برداشت کرده‌اید."
+        )
         return
-    save_data({})
-    set_balance(OWNER_ID, OWNER_BALANCE)
-    await update.message.reply_text(f"✅ موجودی ریست شد (موجودی شما: {OWNER_BALANCE:,})")
 
-async def resetstats(update, context):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("❌ فقط مالک")
+    if invited >= needed:
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "✅ برداشت",
+                    callback_data="claim_free"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ]
+
+        text = (
+            "🎁 اک رایگان\n\n"
+            "تبریک! شما شرایط دریافت اک رایگان را دارید. ✅\n\n"
+            "برای ارسال درخواست روی دکمه زیر بزنید."
+        )
+
+    else:
+
+        remaining = needed - invited
+
+        bot = await context.bot.get_me()
+        link = f"https://t.me/{bot.username}?start={user_id}"
+
+        text = (
+            "🎁 اک رایگان\n\n"
+            f"👥 تعداد لازم: {needed} نفر\n"
+            f"👤 دعوت شده: {invited} نفر\n"
+            f"⏳ باقی‌مانده: {remaining} نفر\n\n"
+            "لینک دعوت شما:\n"
+            f"{link}\n\n"
+            "دو نفر را با لینک بالا وارد ربات کنید."
+        )
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "👥 لینک دعوت من",
+                    callback_data="my_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ]
+
+    await query.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================
+# کمبو
+# =========================
+
+async def combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    user = get_user(user_id)
+
+    needed = 1
+    invited = user["invited"]
+
+    if user["combo_claimed"]:
+        await query.message.edit_text(
+            "❌ شما قبلاً کمبو 100درصد خود را برداشت کرده‌اید."
+        )
         return
-    save_stats({})
-    await update.message.reply_text("✅ آمار ریست شد")
 
-async def resetall(update, context):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("❌ فقط مالک")
+    if invited >= needed:
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "✅ برداشت",
+                    callback_data="claim_combo"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ]
+
+        text = (
+            "💯 کمبو 100درصد\n\n"
+            "تبریک! شما شرایط دریافت کمبو را دارید. ✅\n\n"
+            "برای ارسال درخواست روی دکمه زیر بزنید."
+        )
+
+    else:
+
+        bot = await context.bot.get_me()
+        link = f"https://t.me/{bot.username}?start={user_id}"
+
+        text = (
+            "💯 کمبو 100درصد\n\n"
+            "👥 برای دریافت کمبو باید 1 نفر را دعوت کنید.\n\n"
+            f"👤 دعوت شده: {invited}/1\n\n"
+            "🔗 لینک دعوت شما:\n"
+            f"{link}"
+        )
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "👥 لینک دعوت من",
+                    callback_data="my_link"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="back"
+                )
+            ]
+        ]
+
+    await query.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================
+# برداشت اک رایگان
+# =========================
+
+async def claim_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    user = get_user(user_id)
+
+    if user["invited"] < 2:
+        await query.message.edit_text(
+            "❌ شما هنوز شرایط برداشت را ندارید."
+        )
         return
-    save_data({})
-    set_balance(OWNER_ID, OWNER_BALANCE)
-    save_stats({})
-    await update.message.reply_text(f"✅ ریست کامل شد (موجودی شما: {OWNER_BALANCE:,})")
 
-async def button(update, context):
+    if user["free_claimed"]:
+        await query.message.edit_text(
+            "❌ درخواست شما قبلاً ثبت شده است."
+        )
+        return
+
+    user["free_claimed"] = True
+    save_data(data)
+
+    user_info = query.from_user
+
+    message = (
+        "🎁 درخواست اک رایگان\n\n"
+        f"👤 نام: {user_info.full_name}\n"
+        f"🆔 آیدی عددی: {user_id}\n"
+        f"🔗 یوزرنیم: @{user_info.username if user_info.username else 'ندارد'}\n"
+        f"👥 دعوت‌ها: {user['invited']}\n\n"
+        "نوع درخواست: اک رایگان"
+    )
+
     try:
-        q = update.callback_query
-        await q.answer()
-        cmd = q.data
-        if cmd in ["dice","basketball","bowling","dart"]:
-            names = {"dice":"تاس", "basketball":"بسکتبال", "bowling":"بولینگ", "dart":"دارت"}
-            await q.message.reply_text(f"🎮 مثال: `1{names[cmd]} 200` یا `1{names[cmd]}200`")
-        elif cmd == "balance":
-            await q.message.reply_text(f"💰 موجودی: {get_balance(q.from_user.id):,} سکه")
-        elif cmd == "stats":
-            s = get_stats(q.from_user.id)
-            await q.message.reply_text(f"📊 برد: {s['wins']}\nباخت: {s['losses']}\nمساوی: {s['draws']}")
+        await context.bot.send_message(
+            chat_id=CHANNEL_USERNAME,
+            text=message
+        )
     except Exception as e:
-        logger.error(f"button error: {e}")
+        print("CHANNEL ERROR:", e)
+
+    await query.message.edit_text(
+        "برداشت شما به کانال زیر ارسال شد ✅️\n\n"
+        f"{CHANNEL_LINK}"
+    )
+
+
+# =========================
+# برداشت کمبو
+# =========================
+
+async def claim_combo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    user = get_user(user_id)
+
+    if user["invited"] < 1:
+        await query.message.edit_text(
+            "❌ شما هنوز شرایط برداشت را ندارید."
+        )
+        return
+
+    if user["combo_claimed"]:
+        await query.message.edit_text(
+            "❌ درخواست شما قبلاً ثبت شده است."
+        )
+        return
+
+    user["combo_claimed"] = True
+    save_data(data)
+
+    user_info = query.from_user
+
+    message = (
+        "💯 درخواست کمبو 100درصد\n\n"
+        f"👤 نام: {user_info.full_name}\n"
+        f"🆔 آیدی عددی: {user_id}\n"
+        f"🔗 یوزرنیم: @{user_info.username if user_info.username else 'ندارد'}\n"
+        f"👥 دعوت‌ها: {user['invited']}\n\n"
+        "نوع درخواست: کمبو 100درصد"
+    )
+
+    try:
+        await context.bot.send_message(
+            chat_id=CHANNEL_USERNAME,
+            text=message
+        )
+    except Exception as e:
+        print("CHANNEL ERROR:", e)
+
+    await query.message.edit_text(
+        "برداشت شما به کانال زیر ارسال شد✅️\n\n"
+        f"{CHANNEL_LINK}"
+    )
+
+
+# =========================
+# انتقال مالکیت
+# =========================
+
+async def transfer_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    if not is_owner(user_id):
+        await update.message.reply_text(
+            "❌ این دستور فقط برای مالک ربات است."
+        )
+        return
+
+    context.user_data["waiting_for_new_owner"] = True
+
+    await update.message.reply_text(
+        "👑 انتقال مالکیت\n\n"
+        "آیدی عددی مالک جدید را ارسال کنید:"
+    )
+
+
+# =========================
+# دریافت آیدی مالک جدید
+# =========================
+
+async def receive_owner_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not context.user_data.get("waiting_for_new_owner"):
+        return
+
+    if not is_owner(update.effective_user.id):
+        return
+
+    text = update.message.text.strip()
+
+    try:
+        new_owner_id = int(text)
+    except ValueError:
+        await update.message.reply_text(
+            "❌ آیدی عددی صحیح نیست.\n"
+            "مثال:\n"
+            "123456789"
+        )
+        return
+
+    data["owner_id"] = new_owner_id
+    save_data(data)
+
+    context.user_data["waiting_for_new_owner"] = False
+
+    await update.message.reply_text(
+        "✅ انتقال مالکیت با موفقیت انجام شد.\n\n"
+        f"👑 مالک جدید:\n"
+        f"{new_owner_id}"
+    )
+
+
+# =========================
+# بازگشت
+# =========================
+
+async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    await query.message.edit_text(
+        "🏠 منوی اصلی\n\n"
+        "گزینه مورد نظر خودت رو انتخاب کن:",
+        reply_markup=main_menu()
+    )
+
+
+# =========================
+# Callback
+# =========================
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+
+    if query.data == "free_account":
+        await free_account(update, context)
+
+    elif query.data == "combo":
+        await combo(update, context)
+
+    elif query.data == "my_link":
+        await my_link(update, context)
+
+    elif query.data == "claim_free":
+        await claim_free(update, context)
+
+    elif query.data == "claim_combo":
+        await claim_combo(update, context)
+
+    elif query.data == "back":
+        await back(update, context)
+
+
+# =========================
+# خطاها
+# =========================
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print("ERROR:", context.error)
+
+
+# =========================
+# اجرای ربات
+# =========================
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+
+    if not BOT_TOKEN:
+        raise ValueError(
+            "BOT_TOKEN در Environment Variables تنظیم نشده است."
+        )
+
+    app = Application.builder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("balance", balance))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("transfer", transfer))
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("resetstats", resetstats))
-    app.add_handler(CommandHandler("resetall", resetall))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game))
-    print("🤖 ربات روشن شد...")
+    app.add_handler(CommandHandler("transferowner", transfer_owner))
+
+    app.add_handler(
+        CallbackQueryHandler(button_handler)
+    )
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            receive_owner_id
+        )
+    )
+
+    app.add_error_handler(error_handler)
+
+    print("Bot is running...")
+
     app.run_polling()
 
+
 if __name__ == "__main__":
-    main() 
+    main()

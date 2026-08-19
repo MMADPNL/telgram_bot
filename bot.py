@@ -440,19 +440,14 @@ async def free_account(
             f"?start={user_id}"
         )
 
-        remaining = (
-            needed -
-            user["invited"]
-        )
+        remaining = needed - user["invited"]
 
-        text = (
-
-            "🎁 اک رایگان\n\n"
-
-            f"👥 تعداد لازم: {needed} نفر\n"
-
-            f"👤 دعوت شده: "
-            f"{user['invited']} نفر\n"
-
-            f"⏳ باقی‌مانده: "
-            f"{remaining} نفر
+text = (
+    "🎁 اک رایگان\n\n"
+    f"👥 تعداد لازم: {needed} نفر\n"
+    f"👤 دعوت شده: {user['invited']} نفر\n"
+    f"⏳ باقی‌مانده: {remaining} نفر\n\n"
+    "🔗 لینک دعوت شما:\n"
+    f"{link}\n\n"
+    "دو نفر را با لینک بالا وارد ربات کنید."
+)

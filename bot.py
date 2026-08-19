@@ -432,4 +432,20 @@ async def reset_balance(
 
         )
 
-    except Exception
+            except Exception:
+            add_balance(
+                user_id,
+                amount
+            )
+
+            await update.message.reply_text(
+                "❌ ارسال درخواست برداشت انجام نشد.\n\n"
+                "موجودی شما برگشت داده شد."
+            )
+
+            print(
+                "WITHDRAW ERROR:",
+                e
+            )
+
+            return

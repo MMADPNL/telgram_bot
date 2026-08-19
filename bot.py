@@ -399,12 +399,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             return
 
-        count = reset_all_balances()
+        
+
+                count = reset_all_balances()
 
         await query.message.reply_text(
-
             "✅ ریست موجودی‌ها انجام شد.\n\n"
-
             f"👥 تعداد کاربران ریست‌شده: {count}\n"
             "💰 موجودی همه کاربران: 0 امتیاز"
         )
